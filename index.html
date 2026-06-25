@@ -68,10 +68,6 @@
 <!-- ====== SCHERMATA ACCESSO / CANDIDATURA ====== -->
 <div id="screen-auth" class="wrap">
   <div class="card">
-    <div class="tabbar">
-      <button id="tab-login" class="btn tab-on" onclick="switchTab('login')">Accedi</button>
-      <button id="tab-cand" class="btn" onclick="switchTab('cand')">Candidati come docente</button>
-    </div>
 
     <!-- LOGIN -->
     <div id="box-login">
@@ -84,10 +80,15 @@
         <button class="btn btn-p" id="btn-login" onclick="login()" style="flex:1">Accedi</button>
         <button class="btn" id="btn-signup" onclick="signup()" style="flex:1">Primo accesso: imposta password</button>
       </div>
+      <div style="text-align:center;margin-top:16px;border-top:1px solid var(--border);padding-top:14px">
+        <span class="muted">Non sei ancora docente?</span><br>
+        <button class="btn btn-sm" onclick="mostraCand()" style="margin-top:8px">Candidati come docente</button>
+      </div>
     </div>
 
     <!-- CANDIDATURA -->
     <div id="box-cand" class="hidden">
+      <button class="btn btn-sm" onclick="mostraLogin()" style="margin-bottom:12px">← Torna all'accesso</button>
       <h2>Candidati come docente</h2>
       <p class="muted">Compila il modulo: la tua candidatura arriverà a Leone Consulting, che la valuterà e ti ricontatterà. I certificati li potrai caricare dopo l'attivazione dell'account.</p>
       <div id="cand-msg"></div>
@@ -259,12 +260,8 @@ function hide(id){ document.getElementById(id).classList.add('hidden') }
 function tornaIndietro(){ if(window.history.length>1){ history.back() } else { location.href='https://area.leoneconsultingitalia.it' } }
 function msg(box, txt, ok){ const e=document.getElementById(box); e.innerHTML = txt?('<div class="msg '+(ok?'msg-ok':'msg-err')+'">'+esc(txt)+'</div>'):'' }
 
-function switchTab(t){
-  document.getElementById('tab-login').classList.toggle('tab-on', t==='login')
-  document.getElementById('tab-cand').classList.toggle('tab-on', t==='cand')
-  document.getElementById('box-login').classList.toggle('hidden', t!=='login')
-  document.getElementById('box-cand').classList.toggle('hidden', t!=='cand')
-}
+function mostraCand(){ hide('box-login'); show('box-cand'); window.scrollTo({top:0}) }
+function mostraLogin(){ show('box-login'); hide('box-cand'); window.scrollTo({top:0}) }
 
 // ---- AUTH ----
 async function login(){
