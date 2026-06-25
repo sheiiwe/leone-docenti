@@ -48,6 +48,16 @@
   .spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;display:inline-block}
   @keyframes sp{to{transform:rotate(360deg)}}
   .logo-sm{width:52px;height:52px;border-radius:50%;background:#fff;object-fit:contain;flex-shrink:0;padding:1px}
+  .empty{padding:18px;text-align:center;color:var(--text3);font-size:13.5px}
+  .videobox{position:relative;width:100%;padding-top:56.25%;border-radius:10px;overflow:hidden;background:#000;margin-top:10px}
+  .videobox iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+  .chatbox{height:52vh;min-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:6px 2px}
+  .bub{max-width:78%;padding:9px 12px;border-radius:13px;font-size:14px;line-height:1.4;word-wrap:break-word}
+  .bub .meta{font-size:10.5px;color:var(--text3);margin-top:4px}
+  .bub-me{align-self:flex-end;background:var(--blu);color:#fff;border-bottom-right-radius:4px}
+  .bub-me .meta{color:rgba(255,255,255,.75)}
+  .bub-them{align-self:flex-start;background:#eef2f7;color:var(--text);border-bottom-left-radius:4px}
+  .iconbtn{display:inline-flex;align-items:center;justify-content:center;width:42px;height:44px;border-radius:9px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:18px;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -61,6 +71,9 @@
     <button class="btn" id="nv-bacheca" onclick="vai('bacheca')">📣 Bacheca</button>
     <button class="btn" id="nv-listino" onclick="vai('listino')">💶 Listino</button>
     <button class="btn" id="nv-doccom" onclick="vai('doccom')">📁 Documenti</button>
+    <button class="btn" id="nv-lezioni" onclick="vai('lezioni')">📚 Lezioni</button>
+    <button class="btn" id="nv-chat" onclick="vai('chat')">💬 Chat</button>
+    <button class="btn" id="nv-video" onclick="vai('video')">🎥 Video</button>
   </div>
 </div>
 
@@ -200,6 +213,60 @@
   </div>
 </div>
 
+<!-- ====== LEZIONI (caricamento videolezioni) ====== -->
+<div id="screen-lezioni" class="wrap hidden">
+  <div class="card">
+    <h2>Nuova videolezione</h2>
+    <p class="muted">Carica una videolezione o un materiale per i tuoi studenti.</p>
+    <label class="fld"><span>Titolo *</span><input type="text" id="lz-titolo" placeholder="Es. Le equazioni di secondo grado"></label>
+    <div class="row">
+      <label class="fld"><span>Materia</span><input type="text" id="lz-materia" placeholder="Es. Matematica"></label>
+      <label class="fld"><span>Destinatario *</span><select id="lz-dest"></select></label>
+    </div>
+    <label class="fld"><span>Link video (YouTube, Google Drive, Vimeo o altro)</span><input type="text" id="lz-video" placeholder="https://..."></label>
+    <label class="fld"><span>Descrizione</span><textarea id="lz-desc" placeholder="Indicazioni, argomenti, compiti..."></textarea></label>
+    <label class="fld"><span>Allegati (PDF, immagini, documenti)</span>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:4px"><label class="btn btn-sm" style="cursor:pointer">📎 Aggiungi file<input type="file" id="lz-file" class="hidden" multiple onchange="lzAggiungiFile(this)"></label><span id="lz-file-stato" class="muted"></span></div>
+      <div id="lz-file-lista" class="chips"></div>
+    </label>
+    <div style="margin-top:16px"><button class="btn btn-p" id="btn-lz-salva" onclick="salvaLezione()" style="width:100%">📤 Pubblica la lezione</button></div>
+    <div id="lz-msg"></div>
+  </div>
+  <div class="card">
+    <h2>Le mie lezioni</h2>
+    <div id="lezioni-doc-lista"></div>
+  </div>
+  <div class="foot">Leone Consulting di Leonardo Angelucci · Velletri (RM)</div>
+</div>
+
+<!-- ====== CHAT CON STUDENTI ====== -->
+<div id="screen-chat" class="wrap hidden">
+  <div class="card">
+    <h2>Chat con gli studenti</h2>
+    <label class="fld"><span>Studente</span><select id="chat-stud" onchange="apriChatDoc()"></select></label>
+    <div id="chat-msgs" class="chatbox" style="margin-top:12px"><div class="empty">Seleziona uno studente per iniziare.</div></div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:10px">
+      <textarea id="chat-in" placeholder="Scrivi un messaggio..." style="min-height:44px"></textarea>
+      <label class="iconbtn" title="Allega file">📎<input type="file" id="chat-file" class="hidden" onchange="inviaAllegatoChatDoc(this)"></label>
+      <button class="btn btn-p" onclick="inviaMessaggioDoc()" style="height:44px">Invia</button>
+    </div>
+    <div id="chat-stato" class="muted" style="margin-top:6px"></div>
+  </div>
+  <div class="foot">Leone Consulting di Leonardo Angelucci · Velletri (RM)</div>
+</div>
+
+<!-- ====== VIDEOCHIAMATA ====== -->
+<div id="screen-video" class="wrap hidden">
+  <div class="card">
+    <h2>Videochiamata con lo studente</h2>
+    <p class="muted">Scegli lo studente ed entra nella sua stanza. Lo studente entra dalla stessa stanza dal suo portale.</p>
+    <label class="fld"><span>Studente</span><select id="video-stud"></select></label>
+    <div id="video-pre" style="margin-top:10px"><button class="btn btn-p" onclick="avviaVideoDoc()">🎥 Entra nella stanza</button></div>
+    <div id="video-host" class="hidden"><div class="videobox" id="video-frame-wrap"></div><button class="btn btn-sm" onclick="chiudiVideoDoc()" style="margin-top:10px">Esci dalla videochiamata</button></div>
+  </div>
+  <div class="foot">Leone Consulting di Leonardo Angelucci · Velletri (RM)</div>
+</div>
+
 <!-- ====== CALENDARIO DISPONIBILITA ====== -->
 <div id="screen-calendario" class="wrap hidden">
   <div class="card">
@@ -295,7 +362,7 @@ function tradErr(e){
   if(m.includes('already registered')) return 'Questa email è già registrata: premi "Accedi".'
   return (e&&e.message)||'Errore. Riprova.'
 }
-async function logout(){ try{ await db.auth.signOut() }catch(e){} location.reload() }
+async function logout(){ try{ if(_chatSubDoc) db.removeChannel(_chatSubDoc) }catch(e){} try{ await db.auth.signOut() }catch(e){} location.reload() }
 
 async function avvia(session){
   if(!session){ return }
@@ -310,6 +377,7 @@ async function avvia(session){
     return
   }
   MIO_D = d
+  await caricaMieiStudenti()
   renderProfilo()
   show('mainnav'); vai('profilo')
 }
@@ -406,7 +474,7 @@ async function inviaCandidatura(){
 
 
 // ---- NAVIGAZIONE SEZIONI ----
-const _NV=['profilo','calendario','bacheca','listino','doccom']
+const _NV=['profilo','calendario','bacheca','listino','doccom','lezioni','chat','video']
 function vai(t){
   _NV.forEach(s=>{ const b=document.getElementById('nv-'+s); if(b) b.classList.toggle('tab-on', s===t); const sc=document.getElementById('screen-'+s); if(sc) sc.classList.toggle('hidden', s!==t) })
   window.scrollTo({top:0})
@@ -414,6 +482,10 @@ function vai(t){
   if(t==='listino') caricaListinoDoc()
   if(t==='doccom') caricaDocCommDoc()
   if(t==='calendario') renderCalendario()
+  if(t==='lezioni'){ renderLezioniDocForm(); caricaLezioniDoc() }
+  if(t==='chat') renderChatPicker()
+  if(t==='video') renderVideoPicker()
+  if(t!=='video') chiudiVideoDoc()
 }
 function _vis(aree){ return !(Array.isArray(aree)&&aree.length) || aree.includes('doc') }
 function eur(n){ const x=Number(n)||0; return '\u20ac '+x.toLocaleString('it-IT',{minimumFractionDigits:0,maximumFractionDigits:2}) }
@@ -577,6 +649,198 @@ async function salvaDisponibilita(){
   }catch(e){ st.textContent='Errore: '+((e&&e.message)||e) }
 }
 
+
+// ===== STUDENTI DEL DOCENTE =====
+let MIEI_STUDENTI=[]
+function _docEmail(){ return ((MIO_D&&(MIO_D.email_aziendale||MIO_D.email))||'').toLowerCase() }
+async function caricaMieiStudenti(){
+  try{ const r=await db.from('studenti').select('*'); MIEI_STUDENTI=(r.data||[]).map(x=>({_id:x.id,...x.data})).filter(s=>String(s.docenteId||'')===String(MIO_D._id)) }catch(e){ MIEI_STUDENTI=[] }
+}
+function _optStudenti(conTutti){
+  let o = conTutti ? '<option value="__all__">— Tutti i miei studenti —</option>' : '<option value="">— Scegli studente —</option>'
+  o += MIEI_STUDENTI.map(s=>'<option value="'+s._id+'">'+esc(s.nome||s.email||'Studente')+'</option>').join('')
+  return o
+}
+function _studById(id){ return MIEI_STUDENTI.find(s=>s._id===id)||null }
+
+// ===== LEZIONI =====
+function _embed(url){
+  url=(url||'').trim(); if(!url) return ''
+  let m
+  if((m=url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]{6,})/))) return 'https://www.youtube.com/embed/'+m[1]
+  if((m=url.match(/drive\.google\.com\/file\/d\/([\w-]+)/))) return 'https://drive.google.com/file/d/'+m[1]+'/preview'
+  if((m=url.match(/vimeo\.com\/(\d+)/))) return 'https://player.vimeo.com/video/'+m[1]
+  return ''
+}
+let _lzAllegati=[]
+function _renderLzFile(){
+  const box=document.getElementById('lz-file-lista'); if(!box) return
+  box.innerHTML=_lzAllegati.map((a,i)=>'<span class="chip">📎 '+esc(a.nome)+' <b onclick="_lzRimuoviFile('+i+')">✕</b></span>').join('')
+}
+function _lzRimuoviFile(i){ _lzAllegati.splice(i,1); _renderLzFile() }
+async function lzAggiungiFile(input){
+  const files=Array.from(input.files||[]); if(!files.length) return
+  const st=document.getElementById('lz-file-stato'); st.textContent='Caricamento…'
+  for(const f of files){
+    if(f.size>25*1024*1024){ alert('File troppo grande (max 25MB): '+f.name); continue }
+    try{
+      const ext=(f.name.split('.').pop()||'bin').toLowerCase()
+      const path='lezioni/'+MIO_D._id+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'.'+ext
+      const up=await db.storage.from('documenti').upload(path,f,{upsert:true,contentType:f.type||'application/octet-stream'}); if(up.error) throw up.error
+      const pub=db.storage.from('documenti').getPublicUrl(path)
+      _lzAllegati.push({ url:(pub&&pub.data&&pub.data.publicUrl)||'', nome:f.name })
+    }catch(e){ alert('Errore allegato '+f.name+': '+((e&&e.message)||e)) }
+  }
+  st.textContent=''; input.value=''; _renderLzFile()
+}
+function renderLezioniDocForm(){
+  const sel=document.getElementById('lz-dest'); if(sel) sel.innerHTML=_optStudenti(true)
+  const mat=document.getElementById('lz-materia')
+  if(mat && !mat.value && MIO_D && Array.isArray(MIO_D.materie) && MIO_D.materie.length) mat.value=MIO_D.materie[0]
+}
+async function salvaLezione(){
+  const titolo=(document.getElementById('lz-titolo').value||'').trim()
+  if(!titolo){ msg('lz-msg','Inserisci un titolo.'); return }
+  const destVal=document.getElementById('lz-dest').value
+  const video=(document.getElementById('lz-video').value||'').trim()
+  const materia=(document.getElementById('lz-materia').value||'').trim()
+  const descrizione=(document.getElementById('lz-desc').value||'').trim()
+  if(!video && !_lzAllegati.length){ msg('lz-msg','Aggiungi almeno un link video o un allegato.'); return }
+  const b=document.getElementById('btn-lz-salva'); b.disabled=true; b.innerHTML='<span class="spin"></span> Pubblico…'
+  try{
+    const rec={ titolo, materia, video, descrizione, allegati:_lzAllegati.slice(), docenteId:MIO_D._id, docenteEmail:_docEmail(), docenteNome:MIO_D.nome||'', data:new Date().toLocaleDateString('it-IT') }
+    if(destVal && destVal!=='__all__'){
+      const s=_studById(destVal)
+      if(s){ rec.studenteId=s._id; rec.studenteEmail=(s.email||'').toLowerCase(); rec.studenteNome=s.nome||'' }
+    }
+    const { error } = await db.from('lezioni').insert({ data:rec }); if(error) throw error
+    msg('lz-msg','Lezione pubblicata.', true)
+    document.getElementById('lz-titolo').value=''; document.getElementById('lz-video').value=''; document.getElementById('lz-desc').value=''
+    _lzAllegati=[]; _renderLzFile()
+    await caricaLezioniDoc()
+  }catch(e){ msg('lz-msg','Errore: '+((e&&e.message)||e)) }
+  b.disabled=false; b.innerHTML='📤 Pubblica la lezione'
+}
+async function caricaLezioniDoc(){
+  const box=document.getElementById('lezioni-doc-lista'); if(!box) return
+  box.innerHTML='<div class="empty">Caricamento…</div>'
+  let rows=[]
+  try{ const r=await db.from('lezioni').select('*').order('created_at',{ascending:false}); rows=(r.data||[]).map(x=>({_id:x.id,created:x.created_at,...(x.data||{})})) }
+  catch(e){ box.innerHTML='<div class="empty">Lezioni non disponibili.</div>'; return }
+  rows=rows.filter(l=>String(l.docenteId||'')===String(MIO_D._id))
+  if(!rows.length){ box.innerHTML='<div class="empty">Non hai ancora pubblicato lezioni.</div>'; return }
+  box.innerHTML=rows.map(l=>{
+    const dest = l.studenteNome ? esc(l.studenteNome) : 'Tutti i tuoi studenti'
+    const data=l.data||(l.created?new Date(l.created).toLocaleDateString('it-IT'):'')
+    const alleg=(l.allegati||[]).map(a=>'<a href="'+esc(a.url)+'" target="_blank" rel="noopener" class="btn btn-sm" style="margin:4px 6px 0 0">📎 '+esc(a.nome||'Allegato')+'</a>').join('')
+    return '<div class="card" style="margin:10px 0;padding:16px">'+
+      '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div style="font-weight:700;font-size:15px">'+esc(l.titolo||'Lezione')+'</div><button class="btn btn-sm" onclick="eliminaLezione(\''+l._id+'\')" title="Elimina">🗑</button></div>'+
+      '<div class="muted" style="margin-top:2px">'+esc([l.materia,data].filter(Boolean).join(' · '))+' · 👤 '+dest+'</div>'+
+      (l.descrizione?'<div style="margin-top:8px;white-space:pre-wrap;line-height:1.5">'+esc(l.descrizione)+'</div>':'')+
+      (l.video?'<div style="margin-top:8px"><a class="btn btn-sm btn-p" href="'+esc(l.video)+'" target="_blank" rel="noopener">▶ Apri video</a></div>':'')+
+      (alleg?'<div style="margin-top:8px">'+alleg+'</div>':'')+
+    '</div>'
+  }).join('')
+}
+async function eliminaLezione(id){
+  if(!confirm('Eliminare questa lezione?')) return
+  try{ const r=await db.from('lezioni').delete().eq('id',id); if(r.error) throw r.error; await caricaLezioniDoc() }
+  catch(e){ alert('Errore: '+((e&&e.message)||e)) }
+}
+
+// ===== CHAT =====
+let _chatSubDoc=null, _chatStudCur=null
+function renderChatPicker(){
+  const sel=document.getElementById('chat-stud'); if(!sel) return
+  const cur=sel.value
+  sel.innerHTML=_optStudenti(false); if(cur) sel.value=cur
+  if(!MIEI_STUDENTI.length){ document.getElementById('chat-msgs').innerHTML='<div class="empty">Non hai ancora studenti assegnati. Li assegna Leone Consulting dall\u0027app.</div>' }
+}
+async function apriChatDoc(){
+  const sel=document.getElementById('chat-stud'); const sid=sel.value
+  const box=document.getElementById('chat-msgs')
+  if(!sid){ box.innerHTML='<div class="empty">Seleziona uno studente per iniziare.</div>'; _chatStudCur=null; return }
+  _chatStudCur=_studById(sid)
+  box.innerHTML='<div class="empty">Caricamento…</div>'
+  await caricaMessaggiDoc()
+  if(!_chatSubDoc){
+    _chatSubDoc=db.channel('chat-doc-'+_docEmail()).on('postgres_changes',{event:'INSERT',schema:'public',table:'messaggi'}, payload=>{
+      const m=payload.new&&payload.new.data; if(!m||!_chatStudCur) return
+      const se=(m.studenteEmail||'').toLowerCase()
+      if(se===((_chatStudCur.email||'').toLowerCase())){ _appendMsgDoc({_id:payload.new.id,created:payload.new.created_at,...m}); _scrollChatDoc() }
+    }).subscribe()
+  }
+}
+async function caricaMessaggiDoc(){
+  const box=document.getElementById('chat-msgs'); if(!_chatStudCur) return
+  const se=(_chatStudCur.email||'').toLowerCase()
+  let rows=[]
+  try{ const r=await db.from('messaggi').select('*').order('created_at',{ascending:true}); rows=(r.data||[]).map(x=>({_id:x.id,created:x.created_at,...(x.data||{})})) }
+  catch(e){ box.innerHTML='<div class="empty">Chat non disponibile.</div>'; return }
+  rows=rows.filter(m=>(m.studenteEmail||'').toLowerCase()===se)
+  if(!rows.length){ box.innerHTML='<div class="empty">Nessun messaggio con '+esc(_chatStudCur.nome||'questo studente')+'. Scrivi tu per primo.</div>'; return }
+  box.innerHTML=''; rows.forEach(_appendMsgDoc); _scrollChatDoc()
+}
+function _appendMsgDoc(m){
+  const box=document.getElementById('chat-msgs')
+  if(box.querySelector('.empty')) box.innerHTML=''
+  if(m._id && box.querySelector('[data-id="'+m._id+'"]')) return
+  const me=(m.mittente||'studente')==='docente'
+  const t=m.created?new Date(m.created).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):''
+  let inner=''
+  if(m.testo) inner+=esc(m.testo)
+  if(m.file_url) inner+=(m.testo?'<br>':'')+'<a href="'+esc(m.file_url)+'" target="_blank" rel="noopener">📎 '+esc(m.file_nome||'Allegato')+'</a>'
+  const div=document.createElement('div')
+  div.className='bub '+(me?'bub-me':'bub-them'); if(m._id) div.setAttribute('data-id',m._id)
+  div.innerHTML=inner+'<div class="meta">'+(me?'Tu':esc((_chatStudCur&&_chatStudCur.nome)||'Studente'))+' · '+t+'</div>'
+  box.appendChild(div)
+}
+function _scrollChatDoc(){ const box=document.getElementById('chat-msgs'); if(box) box.scrollTop=box.scrollHeight }
+async function _inviaRecordDoc(rec){
+  const s=_chatStudCur
+  rec.studenteEmail=(s.email||'').toLowerCase(); rec.docenteEmail=_docEmail(); rec.mittente='docente'; rec.mittenteEmail=_docEmail()
+  rec.studenteId=s._id||''; rec.docenteId=MIO_D._id||''
+  rec.studenteNome=s.nome||''; rec.docenteNome=MIO_D.nome||''; rec.data=new Date().toLocaleString('it-IT')
+  const { error } = await db.from('messaggi').insert({ data:rec }); if(error) throw error
+}
+async function inviaMessaggioDoc(){
+  if(!_chatStudCur){ alert('Seleziona uno studente.'); return }
+  const ta=document.getElementById('chat-in'); const testo=(ta.value||'').trim()
+  if(!testo) return
+  ta.value=''
+  try{ await _inviaRecordDoc({ testo }) }catch(e){ alert('Errore invio: '+((e&&e.message)||e)); ta.value=testo }
+}
+async function inviaAllegatoChatDoc(input){
+  if(!_chatStudCur){ alert('Seleziona uno studente.'); input.value=''; return }
+  const f=input.files&&input.files[0]; if(!f) return
+  if(f.size>15*1024*1024){ alert('File troppo grande (max 15MB).'); input.value=''; return }
+  const st=document.getElementById('chat-stato'); st.textContent='Invio allegato…'
+  try{
+    const ext=(f.name.split('.').pop()||'bin').toLowerCase()
+    const path='chat/'+(_chatStudCur._id||'x')+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'.'+ext
+    const up=await db.storage.from('documenti').upload(path,f,{upsert:true,contentType:f.type||'application/octet-stream'}); if(up.error) throw up.error
+    const pub=db.storage.from('documenti').getPublicUrl(path)
+    await _inviaRecordDoc({ file_url:(pub&&pub.data&&pub.data.publicUrl)||'', file_nome:f.name })
+    st.textContent=''
+  }catch(e){ st.textContent='Errore allegato: '+((e&&e.message)||e) }
+  input.value=''
+}
+
+// ===== VIDEOCHIAMATA (Jitsi) =====
+function renderVideoPicker(){
+  const sel=document.getElementById('video-stud'); if(!sel) return
+  const cur=sel.value; sel.innerHTML=_optStudenti(false); if(cur) sel.value=cur
+}
+function _roomFor(s){ return 'LeoneConsulting_'+String((s&&s._id)||(s&&s.email)||'x').replace(/[^a-zA-Z0-9]/g,'') }
+function avviaVideoDoc(){
+  const sid=document.getElementById('video-stud').value
+  if(!sid){ alert('Scegli uno studente.'); return }
+  const s=_studById(sid); const wrap=document.getElementById('video-frame-wrap')
+  const nome=encodeURIComponent((MIO_D&&MIO_D.nome)||'Docente')
+  wrap.innerHTML='<iframe src="https://meet.jit.si/'+_roomFor(s)+'#userInfo.displayName=%22'+nome+'%22&config.prejoinPageEnabled=false" allow="camera; microphone; fullscreen; display-capture; autoplay"></iframe>'
+  hide('video-pre'); show('video-host')
+}
+function chiudiVideoDoc(){ const wrap=document.getElementById('video-frame-wrap'); if(wrap) wrap.innerHTML=''; const p=document.getElementById('video-pre'), h=document.getElementById('video-host'); if(p) p.classList.remove('hidden'); if(h) h.classList.add('hidden') }
 
 // ---- avvio ----
 ;(async ()=>{
