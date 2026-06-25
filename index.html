@@ -51,7 +51,7 @@
 </style>
 </head>
 <body>
-<header class="top"><div class="wrap"><div style="display:flex;align-items:center;gap:12px"><img class="js-logo logo-sm" alt="LC"><div><h1>Leone Consulting</h1><div class="sub">Portale Docenti</div></div></div><button id="btn-logout" class="btn btn-ghost btn-sm hidden" onclick="logout()">Esci</button></div></header>
+<header class="top"><div class="wrap"><div style="display:flex;align-items:center;gap:12px"><img class="js-logo logo-sm" alt="LC"><div><h1>Leone Consulting</h1><div class="sub">Portale Docenti</div></div></div><div style="display:flex;gap:8px"><button class="btn btn-ghost btn-sm" onclick="tornaIndietro()">← Indietro</button><button id="btn-logout" class="btn btn-ghost btn-sm hidden" onclick="logout()">Esci</button></div></div></header>
 
 <!-- ====== BARRA NAVIGAZIONE (dopo login) ====== -->
 <div id="mainnav" class="wrap hidden" style="position:sticky;top:0;z-index:20;background:var(--bg);padding-top:10px;padding-bottom:2px">
@@ -214,6 +214,7 @@ let MIO_D = null, MIO_EMAIL = '', _materie = [], _certi = [], _certiFile = [], _
 function esc(s){ return (''+(s==null?'':s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])) }
 function show(id){ document.getElementById(id).classList.remove('hidden') }
 function hide(id){ document.getElementById(id).classList.add('hidden') }
+function tornaIndietro(){ if(window.history.length>1){ history.back() } else { location.href='https://area.leoneconsultingitalia.it' } }
 function msg(box, txt, ok){ const e=document.getElementById(box); e.innerHTML = txt?('<div class="msg '+(ok?'msg-ok':'msg-err')+'">'+esc(txt)+'</div>'):'' }
 
 function switchTab(t){
