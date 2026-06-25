@@ -57,6 +57,7 @@
 <div id="mainnav" class="wrap hidden" style="position:sticky;top:0;z-index:20;background:var(--bg);padding-top:10px;padding-bottom:2px">
   <div class="tabbar" style="overflow-x:auto;flex-wrap:nowrap">
     <button class="btn tab-on" id="nv-profilo" onclick="vai('profilo')">👤 Profilo</button>
+    <button class="btn" id="nv-calendario" onclick="vai('calendario')">📅 Calendario</button>
     <button class="btn" id="nv-bacheca" onclick="vai('bacheca')">📣 Bacheca</button>
     <button class="btn" id="nv-listino" onclick="vai('listino')">💶 Listino</button>
     <button class="btn" id="nv-doccom" onclick="vai('doccom')">📁 Documenti</button>
@@ -196,6 +197,47 @@
     </div>
     <iframe id="dv-frame" style="flex:1;border:0;width:100%"></iframe>
   </div>
+</div>
+
+<!-- ====== CALENDARIO DISPONIBILITA ====== -->
+<div id="screen-calendario" class="wrap hidden">
+  <div class="card">
+    <h2>Il mio calendario disponibilità</h2>
+    <p class="muted">Clicca sulle caselle per segnare quando sei disponibile. <b style="color:var(--green)">Verde</b> = ricorrente ogni settimana, <b style="color:var(--blu)">blu</b> = solo questa data.</p>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button class="btn btn-sm" onclick="calSettimana(-1)">‹ Prec.</button>
+      <button class="btn btn-sm" onclick="calOggi()">Oggi</button>
+      <button class="btn btn-sm" onclick="calSettimana(1)">Succ. ›</button>
+      <div id="cal-range" style="font-weight:700;margin-left:6px"></div>
+    </div>
+    <div style="overflow-x:auto;margin-top:12px"><div id="cal-grid"></div></div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-p" onclick="salvaDisponibilita()">💾 Salva disponibilità</button>
+      <span id="cal-stato" class="muted"></span>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Disponibilità ricorrenti</h2>
+    <p class="muted">Imposta fasce che valgono ogni settimana (es. tutti i lunedì 15–18).</p>
+    <div class="grid-checks" id="cal-ric-giorni">
+      <label><input type="checkbox" class="cal-wd" value="1"> Lun</label>
+      <label><input type="checkbox" class="cal-wd" value="2"> Mar</label>
+      <label><input type="checkbox" class="cal-wd" value="3"> Mer</label>
+      <label><input type="checkbox" class="cal-wd" value="4"> Gio</label>
+      <label><input type="checkbox" class="cal-wd" value="5"> Ven</label>
+      <label><input type="checkbox" class="cal-wd" value="6"> Sab</label>
+      <label><input type="checkbox" class="cal-wd" value="7"> Dom</label>
+    </div>
+    <div class="row" style="gap:8px;margin-top:8px">
+      <label class="fld"><span>Dalle</span><select id="cal-ric-da"></select></label>
+      <label class="fld"><span>Alle</span><select id="cal-ric-a"></select></label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="btn btn-sm btn-p" onclick="applicaRicorrente()">Applica ogni settimana</button>
+      <button class="btn btn-sm" onclick="svuotaRicorrenti()">Svuota ricorrenti</button>
+    </div>
+  </div>
+  <div class="foot">Leone Consulting di Leonardo Angelucci · Velletri (RM)</div>
 </div>
 
 <script>
@@ -367,13 +409,14 @@ async function inviaCandidatura(){
 
 
 // ---- NAVIGAZIONE SEZIONI ----
-const _NV=['profilo','bacheca','listino','doccom']
+const _NV=['profilo','calendario','bacheca','listino','doccom']
 function vai(t){
   _NV.forEach(s=>{ const b=document.getElementById('nv-'+s); if(b) b.classList.toggle('tab-on', s===t); const sc=document.getElementById('screen-'+s); if(sc) sc.classList.toggle('hidden', s!==t) })
   window.scrollTo({top:0})
   if(t==='bacheca') caricaBachecaDoc()
   if(t==='listino') caricaListinoDoc()
   if(t==='doccom') caricaDocCommDoc()
+  if(t==='calendario') renderCalendario()
 }
 function _vis(aree){ return !(Array.isArray(aree)&&aree.length) || aree.includes('doc') }
 function eur(n){ const x=Number(n)||0; return '\u20ac '+x.toLocaleString('it-IT',{minimumFractionDigits:0,maximumFractionDigits:2}) }
@@ -467,6 +510,75 @@ function apriDocComm(id){
   document.getElementById('doccom-viewer').style.display='flex'
 }
 function chiudiDocViewer(){ const f=document.getElementById('dv-frame'); if(f) f.src='about:blank'; const v=document.getElementById('doccom-viewer'); if(v) v.style.display='none' }
+
+
+
+// ---- CALENDARIO DISPONIBILITA ----
+const CAL_H0=8, CAL_H1=22
+let _DISP={ric:[],add:[],rem:[]}, _calRef=null
+function _mondayOf(d){ const x=new Date(d); const wd=(x.getDay()+6)%7; x.setDate(x.getDate()-wd); x.setHours(0,0,0,0); return x }
+function _ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0') }
+function _wd1(d){ return ((d.getDay()+6)%7)+1 }
+function calOggi(){ _calRef=_mondayOf(new Date()); renderCalGrid() }
+function calSettimana(n){ if(!_calRef) _calRef=_mondayOf(new Date()); const x=new Date(_calRef); x.setDate(x.getDate()+n*7); _calRef=x; renderCalGrid() }
+function renderCalendario(){
+  const dd=(MIO_D&&MIO_D.disponibilita)||{}
+  _DISP={ ric:Array.isArray(dd.ric)?[...dd.ric]:[], add:Array.isArray(dd.add)?[...dd.add]:[], rem:Array.isArray(dd.rem)?[...dd.rem]:[] }
+  const da=document.getElementById('cal-ric-da'), a=document.getElementById('cal-ric-a')
+  if(da&&!da.options.length){ let o=''; for(let h=CAL_H0;h<CAL_H1;h++) o+='<option value="'+h+'">'+String(h).padStart(2,'0')+':00</option>'; da.innerHTML=o
+    let o2=''; for(let h=CAL_H0+1;h<=CAL_H1;h++) o2+='<option value="'+h+'">'+String(h).padStart(2,'0')+':00</option>'; a.innerHTML=o2; a.value=String(CAL_H0+3) }
+  if(!_calRef) _calRef=_mondayOf(new Date())
+  renderCalGrid()
+}
+function _isAvail(ymd,wd,h){ const ric=_DISP.ric.includes(wd+':'+h); const rem=_DISP.rem.includes(ymd+':'+h); const add=_DISP.add.includes(ymd+':'+h); return (ric&&!rem)||add }
+function renderCalGrid(){
+  const grid=document.getElementById('cal-grid'); if(!grid) return
+  const start=new Date(_calRef); const days=[]; for(let i=0;i<7;i++){ const d=new Date(start); d.setDate(start.getDate()+i); days.push(d) }
+  const rng=document.getElementById('cal-range'); if(rng) rng.textContent=days[0].toLocaleDateString('it-IT',{day:'2-digit',month:'short'})+' \u2013 '+days[6].toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'numeric'})
+  const gN=['Lun','Mar','Mer','Gio','Ven','Sab','Dom']
+  const oggi=_ymd(new Date())
+  let h='<table style="border-collapse:separate;border-spacing:2px;width:100%;min-width:620px;font-size:12px">'
+  h+='<thead><tr><th style="width:46px"></th>'+days.map((d,i)=>{ const t=_ymd(d)===oggi; return '<th style="padding:5px 2px;text-align:center;font-weight:700;'+(t?'color:var(--blu)':'')+'">'+gN[i]+'<br><span style="font-weight:500;color:var(--text3)">'+d.getDate()+'</span></th>' }).join('')+'</tr></thead><tbody>'
+  for(let hh=CAL_H0;hh<CAL_H1;hh++){
+    h+='<tr><td style="padding:2px 4px;color:var(--text3);text-align:right;white-space:nowrap">'+String(hh).padStart(2,'0')+':00</td>'
+    days.forEach(d=>{ const ymd=_ymd(d), wd=_wd1(d), on=_isAvail(ymd,wd,hh)
+      const ric=_DISP.ric.includes(wd+':'+hh)&&!_DISP.rem.includes(ymd+':'+hh)
+      const bg=on?(ric?'#2a9d5c':'#185FA5'):'#fff'; const bd=on?bg:'var(--border)'
+      h+='<td onclick="toggleCella(\''+ymd+'\','+wd+','+hh+')" title="'+String(hh).padStart(2,'0')+':00" style="cursor:pointer;height:24px;border:1px solid '+bd+';background:'+bg+';border-radius:4px"></td>' })
+    h+='</tr>'
+  }
+  h+='</tbody></table>'
+  grid.innerHTML=h
+}
+function toggleCella(ymd,wd,h){
+  const ricKey=wd+':'+h, dateKey=ymd+':'+h
+  const ric=_DISP.ric.includes(ricKey), add=_DISP.add.includes(dateKey), rem=_DISP.rem.includes(dateKey)
+  const on=(ric&&!rem)||add
+  if(on){ if(add){ _DISP.add=_DISP.add.filter(x=>x!==dateKey) } else if(!rem){ _DISP.rem.push(dateKey) } }
+  else { if(rem){ _DISP.rem=_DISP.rem.filter(x=>x!==dateKey) } else if(!_DISP.add.includes(dateKey)){ _DISP.add.push(dateKey) } }
+  renderCalGrid()
+}
+function applicaRicorrente(){
+  const giorni=[...document.querySelectorAll('.cal-wd:checked')].map(c=>+c.value)
+  if(!giorni.length){ alert('Seleziona almeno un giorno della settimana.'); return }
+  const da=+document.getElementById('cal-ric-da').value, a=+document.getElementById('cal-ric-a').value
+  if(a<=da){ alert('L\u0027ora di fine deve essere successiva all\u0027inizio.'); return }
+  giorni.forEach(wd=>{ for(let h=da;h<a;h++){ const k=wd+':'+h; if(!_DISP.ric.includes(k)) _DISP.ric.push(k) } })
+  document.querySelectorAll('.cal-wd:checked').forEach(c=>c.checked=false)
+  renderCalGrid()
+}
+function svuotaRicorrenti(){ if(!confirm('Rimuovere tutte le disponibilità ricorrenti?')) return; _DISP.ric=[]; _DISP.rem=[]; renderCalGrid() }
+async function salvaDisponibilita(){
+  if(!MIO_D) return
+  const st=document.getElementById('cal-stato'); st.textContent='Salvataggio\u2026'
+  try{
+    const base=Object.assign({}, MIO_D); delete base._id
+    base.disponibilita={ ric:_DISP.ric, add:_DISP.add, rem:_DISP.rem }
+    const { error }=await db.from('docenti').update({ data:base }).eq('id',MIO_D._id); if(error) throw error
+    MIO_D=Object.assign({}, base, {_id:MIO_D._id})
+    st.textContent='Salvato \u2713'; setTimeout(()=>{ st.textContent='' },2000)
+  }catch(e){ st.textContent='Errore: '+((e&&e.message)||e) }
+}
 
 
 // ---- avvio ----
