@@ -261,9 +261,9 @@
 <div id="screen-video" class="wrap hidden">
   <div class="card">
     <h2>Videochiamata con lo studente</h2>
-    <p class="muted">Scegli lo studente ed entra nella sua stanza. Lo studente entra dalla stessa stanza dal suo portale.</p>
-    <label class="fld"><span>Studente</span><select id="video-stud"></select></label>
-    <div id="video-pre" style="margin-top:10px"><button class="btn btn-p" onclick="avviaVideoDoc()">🎥 Entra nella stanza</button></div>
+    <p class="muted">I tuoi studenti collegati in questo momento. Chi ha premuto "Sono pronto" è evidenziato in verde. Premi "Avvia lezione" per entrare nella stanza: lo studente riceve l'invito a entrare.</p>
+    <select id="video-stud" style="display:none"></select>
+    <div id="video-pre"><div id="video-studenti-list" style="margin-top:6px"><div class="muted">Caricamento…</div></div></div>
     <div id="video-host" class="hidden"><div class="videobox" id="video-frame-wrap"></div><button class="btn btn-sm" onclick="chiudiVideoDoc()" style="margin-top:10px">Esci dalla videochiamata</button></div>
   </div>
   <div class="foot">Leone Consulting di Leonardo Angelucci · Velletri (RM)</div>
@@ -391,6 +391,7 @@ async function avvia(session){
   await caricaMieiStudenti()
   renderProfilo()
   show('mainnav'); vai('profilo')
+  await caricaMieiStudenti(); _startPresenzaDoc()
 }
 
 // ---- PROFILO ----
@@ -663,6 +664,7 @@ async function salvaDisponibilita(){
 
 // ===== STUDENTI DEL DOCENTE =====
 let MIEI_STUDENTI=[]
+let _presChanD=null, _presenza={}
 function _docEmail(){ return ((MIO_D&&(MIO_D.email_aziendale||MIO_D.email))||'').toLowerCase() }
 async function caricaMieiStudenti(){
   try{ const r=await db.from('studenti').select('*'); MIEI_STUDENTI=(r.data||[]).map(x=>({_id:x.id,...x.data})).filter(s=>String(s.docenteId||'')===String(MIO_D._id)) }catch(e){ MIEI_STUDENTI=[] }
@@ -838,7 +840,49 @@ async function inviaAllegatoChatDoc(input){
 }
 
 // ===== VIDEOCHIAMATA (Jitsi) =====
+// ---- PRESENZA LEZIONI (Realtime, lato docente) ----
+function _startPresenzaDoc(){
+  if(_presChanD || !MIO_D) return
+  _presChanD = db.channel('presenza-lezioni', { config:{ presence:{ key:'doc_'+MIO_D._id } } })
+  _presChanD.on('presence',{event:'sync'},()=>{
+    _presenza={}
+    const st=_presChanD.presenceState()
+    Object.keys(st).forEach(k=>{ (st[k]||[]).forEach(m=>{ if(m && m.ruolo==='studente' && m.studId) _presenza[String(m.studId)]=m }) })
+    renderStudPresenza()
+  })
+  _presChanD.subscribe(async (status)=>{ if(status==='SUBSCRIBED'){ try{ await _presChanD.track({ ruolo:'docente', docId:MIO_D._id, nome:MIO_D.nome||'', ts:Date.now() }) }catch(e){} } })
+}
+function renderStudPresenza(){
+  const box=document.getElementById('video-studenti-list'); if(!box) return
+  if(!MIEI_STUDENTI.length){ box.innerHTML='<div class="muted">Non hai ancora studenti assegnati. Vengono assegnati dall\u0027amministrazione.</div>'; return }
+  const ordinati=MIEI_STUDENTI.slice().sort((a,b)=>{
+    const pa=_presenza[String(a._id)], pb=_presenza[String(b._id)]
+    const sa=(pa&&pa.pronto)?2:(pa?1:0), sb=(pb&&pb.pronto)?2:(pb?1:0)
+    return sb-sa
+  })
+  box.innerHTML=ordinati.map(s=>{
+    const p=_presenza[String(s._id)]
+    const online=!!p, pronto=!!(p&&p.pronto)
+    const stato = pronto?'<span style="color:#16a34a;font-weight:700">✋ Pronto per la lezione</span>' : (online?'<span style="color:#2563eb;font-weight:600">● Online</span>':'<span class="muted">○ Offline</span>')
+    const btn = online?'<button class="btn btn-sm btn-p" onclick="avviaLezioneCon(\''+s._id+'\')">🎥 Avvia lezione</button>':'<button class="btn btn-sm" disabled style="opacity:.45;cursor:default">🎥 Avvia lezione</button>'
+    return '<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:6px 0'+(pronto?';border:1px solid #16a34a;background:#f0fdf4':'')+'"><div><div style="font-weight:600">'+esc(s.nome||s.email||'Studente')+'</div><div style="font-size:12px;margin-top:2px">'+stato+'</div></div>'+btn+'</div>'
+  }).join('')
+}
+function avviaLezioneCon(sid){
+  const s=_studById(sid); if(!s){ alert('Studente non trovato.'); return }
+  const room=_roomFor(s)
+  try{ _presChanD && _presChanD.send({ type:'broadcast', event:'chiamata', payload:{ studId:s._id, room, docenteNome:(MIO_D&&MIO_D.nome)||'Docente' } }) }catch(e){}
+  const wrap=document.getElementById('video-frame-wrap')
+  const nome=encodeURIComponent((MIO_D&&MIO_D.nome)||'Docente')
+  wrap.innerHTML='<iframe src="https://meet.jit.si/'+room+'#userInfo.displayName=%22'+nome+'%22&config.prejoinPageEnabled=false" allow="camera; microphone; fullscreen; display-capture; autoplay"></iframe>'
+  hide('video-pre'); show('video-host')
+}
 function renderVideoPicker(){
+  const sel=document.getElementById('video-stud'); if(sel){ const cur=sel.value; sel.innerHTML=_optStudenti(false); if(cur) sel.value=cur }
+  if(!MIEI_STUDENTI.length){ caricaMieiStudenti().then(()=>{ _startPresenzaDoc(); renderStudPresenza() }) }
+  else { _startPresenzaDoc(); renderStudPresenza() }
+}
+function _renderVideoPicker_OLD(){
   const sel=document.getElementById('video-stud'); if(!sel) return
   const cur=sel.value; sel.innerHTML=_optStudenti(false); if(cur) sel.value=cur
 }
