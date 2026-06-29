@@ -510,7 +510,7 @@ function vai(t){
   if(t==='doccom') caricaDocCommDoc()
   if(t==='calendario') renderCalendario()
   if(t==='lezioni'){ renderLezioniDocForm(); caricaLezioniDoc() }
-  if(t==='chat') renderChatPicker()
+  if(t==='chat'){ caricaMieiStudenti().then(()=>renderChatPicker()) }
   if(t==='video') renderVideoPicker()
   if(t!=='video') chiudiVideoDoc()
 }
@@ -679,11 +679,25 @@ async function salvaDisponibilita(){
 
 // ===== STUDENTI DEL DOCENTE =====
 let MIEI_STUDENTI=[]
+let _studLetti=0, _studErr=null
 let _presChanD=null, _presenza={}
 function _docEmail(){ return ((MIO_D&&(MIO_D.email_aziendale||MIO_D.email))||'').toLowerCase() }
 async function caricaMieiStudenti(){
-  try{ const r=await db.from('studenti').select('*'); MIEI_STUDENTI=(r.data||[]).map(x=>({_id:x.id,...x.data})).filter(s=>String(s.docenteId||'')===String(MIO_D._id)) }catch(e){ MIEI_STUDENTI=[] }
+  _studErr=null; _studLetti=0
+  // 1) Via RPC sicura: il docente vede SOLO i propri studenti (rispetta la privacy dei minori, bypassa la RLS)
+  try{
+    const rp=await db.rpc('miei_studenti')
+    if(!rp.error && Array.isArray(rp.data)){ MIEI_STUDENTI=rp.data.map(x=>({_id:x.id,...x.data})); _studLetti=MIEI_STUDENTI.length; return }
+  }catch(e){}
+  // 2) Fallback (finché la RPC non è creata): lettura diretta + filtro lato client
+  try{
+    const r=await db.from('studenti').select('*')
+    if(r.error) _studErr=(r.error.message||String(r.error))
+    _studLetti=(r.data||[]).length
+    MIEI_STUDENTI=(r.data||[]).map(x=>({_id:x.id,...x.data})).filter(s=>String(s.docenteId||'')===String(MIO_D._id))
+  }catch(e){ _studErr=(e&&e.message)||String(e); MIEI_STUDENTI=[] }
 }
+async function _refreshStudenti(){ await caricaMieiStudenti(); try{renderStudPresenza()}catch(e){}; try{renderChatPicker()}catch(e){} }
 function _optStudenti(conTutti){
   let o = conTutti ? '<option value="__all__">— Tutti i miei studenti —</option>' : '<option value="">— Scegli studente —</option>'
   o += MIEI_STUDENTI.map(s=>'<option value="'+s._id+'">'+esc(s.nome||s.email||'Studente')+'</option>').join('')
@@ -873,7 +887,12 @@ function _startPresenzaDoc(){
 }
 function renderStudPresenza(){
   const box=document.getElementById('video-studenti-list'); if(!box) return
-  if(!MIEI_STUDENTI.length){ box.innerHTML='<div class="muted">Non hai ancora studenti assegnati. Vengono assegnati dall\u0027amministrazione.</div>'; return }
+  if(!MIEI_STUDENTI.length){
+    const refresh=' <button class="btn btn-sm" onclick="_refreshStudenti()" style="margin-left:6px">🔄 Aggiorna</button>'
+    if(_studErr){ box.innerHTML='<div class="muted">Non riesco a leggere gli studenti (probabile permesso mancante). Vai avanti creando la RPC <code>miei_studenti</code>. Dettaglio: '+esc(_studErr)+refresh+'</div>'; return }
+    if(_studLetti>0){ box.innerHTML='<div class="muted">Risultano '+_studLetti+' studenti nel sistema ma nessuno assegnato a te. Nell\u0027app, nella scheda dello studente, imposta il tuo nome in \u0022Docente assegnato\u0022 e salva.'+refresh+'</div>'; return }
+    box.innerHTML='<div class="muted">Non hai ancora studenti assegnati. Vengono assegnati dall\u0027amministrazione.'+refresh+'</div>'; return
+  }
   const ordinati=MIEI_STUDENTI.slice().sort((a,b)=>{
     const pa=_presenza[String(a._id)], pb=_presenza[String(b._id)]
     const sa=(pa&&pa.pronto)?2:(pa?1:0), sb=(pb&&pb.pronto)?2:(pb?1:0)
@@ -898,8 +917,7 @@ function avviaLezioneCon(sid){
 }
 function renderVideoPicker(){
   const sel=document.getElementById('video-stud'); if(sel){ const cur=sel.value; sel.innerHTML=_optStudenti(false); if(cur) sel.value=cur }
-  if(!MIEI_STUDENTI.length){ caricaMieiStudenti().then(()=>{ _startPresenzaDoc(); renderStudPresenza() }) }
-  else { _startPresenzaDoc(); renderStudPresenza() }
+  caricaMieiStudenti().then(()=>{ _startPresenzaDoc(); renderStudPresenza() })
 }
 function _renderVideoPicker_OLD(){
   const sel=document.getElementById('video-stud'); if(!sel) return
