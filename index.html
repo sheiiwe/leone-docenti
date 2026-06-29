@@ -39,8 +39,9 @@
   .chip b{cursor:pointer;color:var(--red);font-weight:800}
   .avatar{width:84px;height:84px;border-radius:50%;background:#eef2f7;border:2px solid #dbe5f0;display:flex;align-items:center;justify-content:center;font-size:30px;overflow:hidden}
   .avatar img{width:100%;height:100%;object-fit:cover}
-  .tabbar{display:flex;gap:8px;margin-bottom:14px}
-  .tabbar .btn{flex:1}
+  .tabbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+  .tabbar .btn{flex:1 1 auto;white-space:nowrap}
+  @media(max-width:760px){.tabbar{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}.tabbar .btn{flex:0 0 auto}}
   .tab-on{background:var(--blu);color:#fff;border-color:var(--blu)}
   .msg{padding:11px 14px;border-radius:9px;font-size:13.5px;margin:12px 0}
   .msg-ok{background:#e8f6ee;color:#1d7a45;border:1px solid #bfe6cf}
@@ -67,7 +68,7 @@
 
 <!-- ====== BARRA NAVIGAZIONE (dopo login) ====== -->
 <div id="mainnav" class="wrap hidden" style="position:sticky;top:0;z-index:20;background:var(--bg);padding-top:10px;padding-bottom:2px">
-  <div class="tabbar" style="overflow-x:auto;flex-wrap:nowrap">
+  <div class="tabbar">
     <button class="btn tab-on" id="nv-profilo" onclick="vai('profilo')">👤 Profilo</button>
     <button class="btn" id="nv-calendario" onclick="vai('calendario')">📅 Calendario</button>
     <button class="btn" id="nv-bacheca" onclick="vai('bacheca')">📣 Bacheca</button>
@@ -264,7 +265,7 @@
     <p class="muted">I tuoi studenti collegati in questo momento. Chi ha premuto "Sono pronto" è evidenziato in verde. Premi "Avvia lezione" per entrare nella stanza: lo studente riceve l'invito a entrare.</p>
     <select id="video-stud" style="display:none"></select>
     <div id="video-pre"><div id="video-studenti-list" style="margin-top:6px"><div class="muted">Caricamento…</div></div></div>
-    <div id="video-host" class="hidden"><div class="videobox" id="video-frame-wrap"></div><button class="btn btn-sm" onclick="chiudiVideoDoc()" style="margin-top:10px">Esci dalla videochiamata</button>
+    <div id="video-host" class="hidden"><div class="videobox" id="video-frame-wrap"></div><button class="btn btn-sm" onclick="chiudiVideoDoc()" style="margin-top:10px">Esci dalla videochiamata</button><button class="btn btn-sm" onclick="_fsVideo()" style="margin-top:10px;margin-left:8px">⛶ Schermo intero</button>
       <div id="lv-panel" style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
           <h3 style="margin:0">📝 Note della lezione</h3>
@@ -944,6 +945,7 @@ function avviaVideoDoc(){
   hide('video-pre'); show('video-host'); _lvInit(_roomFor(s))
 }
 function chiudiVideoDoc(){ _lvClose(); const wrap=document.getElementById('video-frame-wrap'); if(wrap) wrap.innerHTML=''; const p=document.getElementById('video-pre'), h=document.getElementById('video-host'); if(p) p.classList.remove('hidden'); if(h) h.classList.add('hidden') }
+function _fsVideo(){ const el=document.getElementById('video-frame-wrap'); if(!el) return; if(document.fullscreenElement){ (document.exitFullscreen||function(){}).call(document) } else { (el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el) } }
 
 // ===== BLOCCO 2: Note + allegati condivisi (Realtime broadcast su 'presenza-lezioni') =====
 const _lvRuolo='docente'
