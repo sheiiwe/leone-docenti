@@ -248,7 +248,7 @@
     <label class="fld"><span>Studente</span><select id="chat-stud" onchange="apriChatDoc()"></select></label>
     <div id="chat-msgs" class="chatbox" style="margin-top:12px"><div class="empty">Seleziona uno studente per iniziare.</div></div>
     <div style="display:flex;gap:8px;align-items:flex-end;margin-top:10px">
-      <textarea id="chat-in" placeholder="Scrivi un messaggio..." style="min-height:44px"></textarea>
+      <textarea id="chat-in" placeholder="Scrivi un messaggio..." style="min-height:44px" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();inviaMessaggioDoc()}"></textarea>
       <label class="iconbtn" title="Allega file">📎<input type="file" id="chat-file" class="hidden" onchange="inviaAllegatoChatDoc(this)"></label>
       <button class="btn btn-p" onclick="inviaMessaggioDoc()" style="height:44px">Invia</button>
     </div>
@@ -869,6 +869,8 @@ async function inviaAllegatoChatDoc(input){
 }
 
 // ===== VIDEOCHIAMATA (Jitsi) =====
+// Server Jitsi: meet.jit.si obbliga il primo a fare login (moderatore). Usiamo un server aperto.
+const JITSI_HOST='https://meet.ffmuc.net'
 // ---- PRESENZA LEZIONI (Realtime, lato docente) ----
 function _startPresenzaDoc(){
   if(_presChanD || !MIO_D) return
@@ -906,14 +908,23 @@ function renderStudPresenza(){
     return '<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:6px 0'+(pronto?';border:1px solid #16a34a;background:#f0fdf4':'')+'"><div><div style="font-weight:600">'+esc(s.nome||s.email||'Studente')+'</div><div style="font-size:12px;margin-top:2px">'+stato+'</div></div>'+btn+'</div>'
   }).join('')
 }
-function avviaLezioneCon(sid){
+async function avviaLezioneCon(sid){
   const s=_studById(sid); if(!s){ alert('Studente non trovato.'); return }
   const room=_roomFor(s)
-  try{ _presChanD && _presChanD.send({ type:'broadcast', event:'chiamata', payload:{ studId:s._id, room, docenteNome:(MIO_D&&MIO_D.nome)||'Docente' } }) }catch(e){}
   const wrap=document.getElementById('video-frame-wrap')
-  const nome=encodeURIComponent((MIO_D&&MIO_D.nome)||'Docente')
-  wrap.innerHTML='<iframe src="https://meet.jit.si/'+room+'#userInfo.displayName=%22'+nome+'%22&config.prejoinPageEnabled=false" allow="camera; microphone; fullscreen; display-capture; autoplay"></iframe>'
+  wrap.innerHTML='<div class="muted" style="padding:24px">Preparo la stanza\u2026</div>'
   hide('video-pre'); show('video-host'); _lvInit(room)
+  try{ _presChanD && _presChanD.send({ type:'broadcast', event:'chiamata', payload:{ studId:s._id, room, docenteNome:(MIO_D&&MIO_D.nome)||'Docente' } }) }catch(e){}
+  let url=''
+  try{
+    const r=await db.functions.invoke('crea-stanza-video',{ body:{ docenteId:MIO_D._id, studenteId:s._id } })
+    const data=r.data||{}
+    if(!data.url) throw new Error(data.error||(r.error&&r.error.message)||'Errore sconosciuto')
+    url=data.url
+  }catch(e){ wrap.innerHTML='<div style="padding:24px;color:#c0392b">Impossibile aprire la videochiamata: '+esc((e&&e.message)||e)+'</div>'; return }
+  const nome=encodeURIComponent((MIO_D&&MIO_D.nome)||'Docente')
+  const sep=url.indexOf('?')>=0?'&':'?'
+  wrap.innerHTML='<iframe src="'+esc(url)+sep+'embed&screenshare=on&chat=on&displayName='+nome+'" allow="camera; microphone; fullscreen; speaker; display-capture; autoplay"></iframe>'
 }
 function renderVideoPicker(){
   const sel=document.getElementById('video-stud'); if(sel){ const cur=sel.value; sel.innerHTML=_optStudenti(false); if(cur) sel.value=cur }
@@ -929,7 +940,7 @@ function avviaVideoDoc(){
   if(!sid){ alert('Scegli uno studente.'); return }
   const s=_studById(sid); const wrap=document.getElementById('video-frame-wrap')
   const nome=encodeURIComponent((MIO_D&&MIO_D.nome)||'Docente')
-  wrap.innerHTML='<iframe src="https://meet.jit.si/'+_roomFor(s)+'#userInfo.displayName=%22'+nome+'%22&config.prejoinPageEnabled=false" allow="camera; microphone; fullscreen; display-capture; autoplay"></iframe>'
+  wrap.innerHTML='<iframe src="'+JITSI_HOST+'/'+_roomFor(s)+'#userInfo.displayName=%22'+nome+'%22&config.prejoinPageEnabled=false" allow="camera; microphone; fullscreen; display-capture; autoplay"></iframe>'
   hide('video-pre'); show('video-host'); _lvInit(_roomFor(s))
 }
 function chiudiVideoDoc(){ _lvClose(); const wrap=document.getElementById('video-frame-wrap'); if(wrap) wrap.innerHTML=''; const p=document.getElementById('video-pre'), h=document.getElementById('video-host'); if(p) p.classList.remove('hidden'); if(h) h.classList.add('hidden') }
