@@ -264,7 +264,22 @@
     <p class="muted">I tuoi studenti collegati in questo momento. Chi ha premuto "Sono pronto" è evidenziato in verde. Premi "Avvia lezione" per entrare nella stanza: lo studente riceve l'invito a entrare.</p>
     <select id="video-stud" style="display:none"></select>
     <div id="video-pre"><div id="video-studenti-list" style="margin-top:6px"><div class="muted">Caricamento…</div></div></div>
-    <div id="video-host" class="hidden"><div class="videobox" id="video-frame-wrap"></div><button class="btn btn-sm" onclick="chiudiVideoDoc()" style="margin-top:10px">Esci dalla videochiamata</button></div>
+    <div id="video-host" class="hidden"><div class="videobox" id="video-frame-wrap"></div><button class="btn btn-sm" onclick="chiudiVideoDoc()" style="margin-top:10px">Esci dalla videochiamata</button>
+      <div id="lv-panel" style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <h3 style="margin:0">📝 Note della lezione</h3>
+          <span id="lv-typing" class="muted" style="font-size:12px"></span>
+        </div>
+        <p class="muted" style="margin:4px 0 8px">Note e allegati sono condivisi in tempo reale con lo studente durante la lezione.</p>
+        <textarea id="lv-testo" placeholder="Scrivi qui appunti, esercizi, compiti per casa…" style="width:100%;min-height:130px" oninput="_lvOnInput()" onblur="_lvApplyPending()"></textarea>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <label class="btn btn-sm" style="cursor:pointer">📎 Allega file<input type="file" id="lv-file" class="hidden" multiple onchange="_lvAddFile(this)"></label>
+          <button class="btn btn-sm" onclick="_lvAddLink()">🔗 Aggiungi link</button>
+          <span id="lv-file-stato" class="muted" style="font-size:12px"></span>
+        </div>
+        <div id="lv-allegati" style="margin-top:8px"></div>
+      </div>
+    </div>
   </div>
   <div class="foot">Leone Consulting di Leonardo Angelucci · Velletri (RM)</div>
 </div>
@@ -850,6 +865,10 @@ function _startPresenzaDoc(){
     Object.keys(st).forEach(k=>{ (st[k]||[]).forEach(m=>{ if(m && m.ruolo==='studente' && m.studId) _presenza[String(m.studId)]=m }) })
     renderStudPresenza()
   })
+  _presChanD.on('broadcast',{event:'lv-note'},({payload})=>_lvOnNote(payload))
+  _presChanD.on('broadcast',{event:'lv-allegati'},({payload})=>_lvOnAllegati(payload))
+  _presChanD.on('broadcast',{event:'lv-sync-req'},({payload})=>_lvOnSyncReq(payload))
+  _presChanD.on('broadcast',{event:'lv-typing'},({payload})=>_lvOnTyping(payload))
   _presChanD.subscribe(async (status)=>{ if(status==='SUBSCRIBED'){ try{ await _presChanD.track({ ruolo:'docente', docId:MIO_D._id, nome:MIO_D.nome||'', ts:Date.now() }) }catch(e){} } })
 }
 function renderStudPresenza(){
@@ -875,7 +894,7 @@ function avviaLezioneCon(sid){
   const wrap=document.getElementById('video-frame-wrap')
   const nome=encodeURIComponent((MIO_D&&MIO_D.nome)||'Docente')
   wrap.innerHTML='<iframe src="https://meet.jit.si/'+room+'#userInfo.displayName=%22'+nome+'%22&config.prejoinPageEnabled=false" allow="camera; microphone; fullscreen; display-capture; autoplay"></iframe>'
-  hide('video-pre'); show('video-host')
+  hide('video-pre'); show('video-host'); _lvInit(room)
 }
 function renderVideoPicker(){
   const sel=document.getElementById('video-stud'); if(sel){ const cur=sel.value; sel.innerHTML=_optStudenti(false); if(cur) sel.value=cur }
@@ -893,9 +912,95 @@ function avviaVideoDoc(){
   const s=_studById(sid); const wrap=document.getElementById('video-frame-wrap')
   const nome=encodeURIComponent((MIO_D&&MIO_D.nome)||'Docente')
   wrap.innerHTML='<iframe src="https://meet.jit.si/'+_roomFor(s)+'#userInfo.displayName=%22'+nome+'%22&config.prejoinPageEnabled=false" allow="camera; microphone; fullscreen; display-capture; autoplay"></iframe>'
-  hide('video-pre'); show('video-host')
+  hide('video-pre'); show('video-host'); _lvInit(_roomFor(s))
 }
-function chiudiVideoDoc(){ const wrap=document.getElementById('video-frame-wrap'); if(wrap) wrap.innerHTML=''; const p=document.getElementById('video-pre'), h=document.getElementById('video-host'); if(p) p.classList.remove('hidden'); if(h) h.classList.add('hidden') }
+function chiudiVideoDoc(){ _lvClose(); const wrap=document.getElementById('video-frame-wrap'); if(wrap) wrap.innerHTML=''; const p=document.getElementById('video-pre'), h=document.getElementById('video-host'); if(p) p.classList.remove('hidden'); if(h) h.classList.add('hidden') }
+
+// ===== BLOCCO 2: Note + allegati condivisi (Realtime broadcast su 'presenza-lezioni') =====
+const _lvRuolo='docente'
+function _lvCh(){ return _presChanD }
+function _lvNome(){ return (MIO_D&&MIO_D.nome)||'Docente' }
+let _lvRoom=null, _lvNote='', _lvAllegati=[], _lvEditTs=0, _lvPending=null, _lvTypingTimer=null, _lvTypingSent=0, _lvTypingHideTimer=null
+function _lvBroadcast(event,extra){
+  const ch=_lvCh(); if(!ch||!_lvRoom) return
+  try{ ch.send({type:'broadcast',event:event,payload:Object.assign({room:_lvRoom,da:_lvRuolo},extra||{})}) }catch(e){}
+}
+function _lvInit(room){
+  _lvRoom=room; _lvNote=''; _lvAllegati=[]; _lvEditTs=0; _lvPending=null
+  const t=document.getElementById('lv-testo'); if(t) t.value=''
+  const ty=document.getElementById('lv-typing'); if(ty) ty.textContent=''
+  _lvRenderAllegati()
+  setTimeout(()=>_lvBroadcast('lv-sync-req',{}),500)
+}
+function _lvClose(){ _lvRoom=null; clearTimeout(_lvTypingTimer); clearTimeout(_lvTypingHideTimer) }
+function _lvOnInput(){
+  const t=document.getElementById('lv-testo'); if(!t) return
+  _lvNote=t.value; _lvEditTs=Date.now()
+  clearTimeout(_lvTypingTimer)
+  _lvTypingTimer=setTimeout(()=>_lvBroadcast('lv-note',{testo:_lvNote,ts:_lvEditTs}),350)
+  const now=Date.now(); if(now-_lvTypingSent>1200){ _lvTypingSent=now; _lvBroadcast('lv-typing',{nome:_lvNome()}) }
+}
+function _lvApplyPending(){
+  if(_lvPending!=null){ const t=document.getElementById('lv-testo'); if(t){ t.value=_lvPending; _lvNote=_lvPending } _lvPending=null }
+}
+function _lvRenderAllegati(){
+  const box=document.getElementById('lv-allegati'); if(!box) return
+  if(!_lvAllegati.length){ box.innerHTML='<span class="muted" style="font-size:12px">Nessun allegato.</span>'; return }
+  box.innerHTML=_lvAllegati.map(function(a,i){
+    const n=(a.nome||''), ic=a.tipo==='link'?'🔗':(/(jpe?g|png|gif|webp)$/i.test(n)?'🖼️':(/pdf$/i.test(n)?'📄':(/(mp4|mov|webm|m4v|avi)$/i.test(n)?'🎬':'📎')))
+    return '<span style="display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:4px 10px;margin:0 6px 6px 0;font-size:13px;max-width:100%"><span>'+ic+'</span><a href="'+esc(a.url)+'" target="_blank" rel="noopener" style="color:#0f172a;text-decoration:none;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(n)+'</a><span onclick="_lvRemoveAllegato('+i+')" title="Rimuovi" style="cursor:pointer;color:#94a3b8;font-weight:700">✕</span></span>'
+  }).join('')
+}
+async function _lvAddFile(input){
+  const files=Array.from(input.files||[]); if(!files.length) return
+  const st=document.getElementById('lv-file-stato'); if(st) st.textContent='Caricamento…'
+  for(const f of files){
+    if(f.size>50*1024*1024){ alert('File troppo grande (max 50MB): '+f.name); continue }
+    try{
+      const ext=(f.name.split('.').pop()||'bin').toLowerCase()
+      const path='lezioni-live/'+(_lvRoom||'x')+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'.'+ext
+      const up=await db.storage.from('documenti').upload(path,f,{upsert:true,contentType:f.type||'application/octet-stream'}); if(up.error) throw up.error
+      const pub=db.storage.from('documenti').getPublicUrl(path)
+      _lvAllegati.push({ url:(pub&&pub.data&&pub.data.publicUrl)||'', nome:f.name, tipo:'file' })
+    }catch(e){ alert('Errore allegato '+f.name+': '+((e&&e.message)||e)) }
+  }
+  if(st) st.textContent=''; input.value=''
+  _lvRenderAllegati(); _lvBroadcast('lv-allegati',{allegati:_lvAllegati})
+}
+function _lvAddLink(){
+  const url=prompt('Incolla il link (https://...)'); if(!url) return
+  let u=url.trim(); if(!/^https?:\/\//i.test(u)) u='https://'+u
+  const nome=prompt('Nome da mostrare (lascia vuoto per usare il link):')||u
+  _lvAllegati.push({ url:u, nome:nome, tipo:'link' })
+  _lvRenderAllegati(); _lvBroadcast('lv-allegati',{allegati:_lvAllegati})
+}
+function _lvRemoveAllegato(i){ _lvAllegati.splice(i,1); _lvRenderAllegati(); _lvBroadcast('lv-allegati',{allegati:_lvAllegati}) }
+function _lvOnNote(payload){
+  if(!payload||payload.da===_lvRuolo) return
+  if(!_lvRoom||String(payload.room)!==String(_lvRoom)) return
+  if((payload.ts||0)<_lvEditTs) return
+  const t=document.getElementById('lv-testo'); if(!t) return
+  if(document.activeElement===t){ _lvPending=payload.testo||'' }
+  else { t.value=payload.testo||''; _lvNote=t.value }
+}
+function _lvOnAllegati(payload){
+  if(!payload||payload.da===_lvRuolo) return
+  if(!_lvRoom||String(payload.room)!==String(_lvRoom)) return
+  _lvAllegati=Array.isArray(payload.allegati)?payload.allegati:[]; _lvRenderAllegati()
+}
+function _lvOnSyncReq(payload){
+  if(!payload||payload.da===_lvRuolo) return
+  if(!_lvRoom||String(payload.room)!==String(_lvRoom)) return
+  _lvBroadcast('lv-note',{testo:_lvNote,ts:_lvEditTs||1})
+  _lvBroadcast('lv-allegati',{allegati:_lvAllegati})
+}
+function _lvOnTyping(payload){
+  if(!payload||payload.da===_lvRuolo) return
+  if(!_lvRoom||String(payload.room)!==String(_lvRoom)) return
+  const ty=document.getElementById('lv-typing'); if(!ty) return
+  ty.textContent='✍️ '+(payload.nome||'L\u0027altro partecipante')+' sta scrivendo…'
+  clearTimeout(_lvTypingHideTimer); _lvTypingHideTimer=setTimeout(function(){ ty.textContent='' },2200)
+}
 
 // ---- avvio ----
 ;(async ()=>{
