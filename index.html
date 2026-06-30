@@ -77,6 +77,7 @@
     <button class="btn" id="nv-lezioni" onclick="vai('lezioni')">📚 Lezioni</button>
     <button class="btn" id="nv-chat" onclick="vai('chat')">💬 Chat</button>
     <button class="btn" id="nv-video" onclick="vai('video')">🎥 Video</button>
+    <button class="btn" id="nv-pagamenti" onclick="vai('pagamenti')">💳 Pagamenti</button>
   </div>
 </div>
 
@@ -281,6 +282,34 @@
         <div id="lv-allegati" style="margin-top:8px"></div>
       </div>
     </div>
+  </div>
+  <div class="foot">Leone Consulting di Leonardo Angelucci · Velletri (RM)</div>
+</div>
+
+<!-- ====== PAGAMENTI ====== -->
+<div id="screen-pagamenti" class="wrap hidden">
+  <div class="card">
+    <h2>💳 Nuovo pagamento</h2>
+    <p class="muted">Scegli il prodotto, inserisci i dati del cliente e genera un link di pagamento SumUp da inviare, oppure fallo pagare subito.</p>
+    <div style="margin-top:12px">
+      <label class="muted" style="font-size:13px;font-weight:600">Prodotto</label>
+      <select id="pg-prodotto" onchange="_pgPreview()" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-top:4px;background:var(--card);color:var(--text)"><option value="">— Caricamento... —</option></select>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin:12px 0;font-weight:600;cursor:pointer"><input type="checkbox" id="pg-uso-personale" onchange="_pgToggleUso()"> 🛒 Compro per me stesso (uso personale)</label>
+    <div id="pg-cliente-box">
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:160px"><label class="muted" style="font-size:13px;font-weight:600">Nome cliente</label><input id="pg-cli-nome" type="text" placeholder="Mario Rossi" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-top:4px;background:var(--card);color:var(--text)"></div>
+        <div style="flex:1;min-width:160px"><label class="muted" style="font-size:13px;font-weight:600">Email cliente</label><input id="pg-cli-email" type="email" placeholder="mario@email.com" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-top:4px;background:var(--card);color:var(--text)"></div>
+        <div style="flex:1;min-width:130px"><label class="muted" style="font-size:13px;font-weight:600">Telefono</label><input id="pg-cli-tel" type="tel" placeholder="+39 333 0000000" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-top:4px;background:var(--card);color:var(--text)"></div>
+      </div>
+    </div>
+    <div id="pg-preview" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:14px;margin:12px 0">Seleziona un prodotto.</div>
+    <button class="btn" id="pg-genera-btn" onclick="generaPagamento()" style="font-weight:700">💳 Genera link di pagamento</button>
+    <div id="pg-risultato" style="margin-top:14px"></div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><h2 style="margin:0">Le mie vendite</h2><button class="btn btn-sm" onclick="caricaMieiPagamenti()">↻ Aggiorna</button></div>
+    <div id="pg-lista" style="margin-top:12px"><p class="muted">Caricamento...</p></div>
   </div>
   <div class="foot">Leone Consulting di Leonardo Angelucci · Velletri (RM)</div>
 </div>
@@ -502,7 +531,7 @@ async function inviaCandidatura(){
 
 
 // ---- NAVIGAZIONE SEZIONI ----
-const _NV=['profilo','calendario','bacheca','listino','doccom','lezioni','chat','video']
+const _NV=['profilo','calendario','bacheca','listino','doccom','lezioni','chat','video','pagamenti']
 function vai(t){
   _NV.forEach(s=>{ const b=document.getElementById('nv-'+s); if(b) b.classList.toggle('tab-on', s===t); const sc=document.getElementById('screen-'+s); if(sc) sc.classList.toggle('hidden', s!==t) })
   window.scrollTo({top:0})
@@ -513,6 +542,7 @@ function vai(t){
   if(t==='lezioni'){ renderLezioniDocForm(); caricaLezioniDoc() }
   if(t==='chat'){ caricaMieiStudenti().then(()=>renderChatPicker()) }
   if(t==='video') renderVideoPicker()
+  if(t==='pagamenti'){ caricaProdottiVendibili(); caricaMieiPagamenti() }
   if(t!=='video') chiudiVideoDoc()
 }
 function _vis(aree){ return !(Array.isArray(aree)&&aree.length) || aree.includes('doc') }
@@ -946,6 +976,81 @@ function avviaVideoDoc(){
 }
 function chiudiVideoDoc(){ _lvClose(); const wrap=document.getElementById('video-frame-wrap'); if(wrap) wrap.innerHTML=''; const p=document.getElementById('video-pre'), h=document.getElementById('video-host'); if(p) p.classList.remove('hidden'); if(h) h.classList.add('hidden') }
 function _fsVideo(){ const el=document.getElementById('video-frame-wrap'); if(!el) return; if(document.fullscreenElement){ (document.exitFullscreen||function(){}).call(document) } else { (el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el) } }
+
+// ====== PAGAMENTI (docente venditore) ======
+let _PG_PRODOTTI=[]
+function _eur(n){ return '\u20ac '+Number(n||0).toFixed(2).replace('.',',') }
+async function caricaProdottiVendibili(){
+  const sel=document.getElementById('pg-prodotto'); if(!sel) return
+  try{
+    const r=await db.from('prodotti_pagamento').select('*').eq('attivo',true).contains('aree',['doc']).order('nome')
+    if(r.error) throw r.error
+    _PG_PRODOTTI=r.data||[]
+  }catch(e){ _PG_PRODOTTI=[]; }
+  if(!_PG_PRODOTTI.length){ sel.innerHTML='<option value="">— Nessun prodotto disponibile —</option>' }
+  else { sel.innerHTML='<option value="">— Scegli un prodotto —</option>'+_PG_PRODOTTI.map(p=>'<option value="'+p.id+'">'+esc(p.nome)+' ('+_eur(p.prezzo)+')</option>').join('') }
+  _pgPreview()
+}
+function _pgProdSel(){ const id=document.getElementById('pg-prodotto').value; return _PG_PRODOTTI.find(p=>p.id===id)||null }
+function _pgToggleUso(){
+  const uso=document.getElementById('pg-uso-personale').checked
+  const box=document.getElementById('pg-cliente-box'); if(box) box.style.display=uso?'none':'block'
+  _pgPreview()
+}
+function _pgPreview(){
+  const el=document.getElementById('pg-preview'); if(!el) return
+  const p=_pgProdSel()
+  if(!p){ el.innerHTML='Seleziona un prodotto.'; return }
+  const uso=document.getElementById('pg-uso-personale').checked
+  const prezzo=Number(p.prezzo||0), pct=Number(p.provvigione_pct||0), prov=Math.round(prezzo*pct)/100
+  if(uso){
+    el.innerHTML='<b>Uso personale</b> \u00b7 tu paghi <b>'+_eur(prezzo-prov)+'</b> <span class="muted">(prezzo '+_eur(prezzo)+' meno la tua provvigione '+_eur(prov)+')</span>'
+  } else {
+    el.innerHTML='Il cliente paga <b>'+_eur(prezzo)+'</b> \u00b7 la tua provvigione: <b>'+_eur(prov)+'</b> ('+pct+'%)'
+  }
+}
+async function generaPagamento(){
+  const p=_pgProdSel()
+  if(!p){ alert('Seleziona un prodotto.'); return }
+  const uso=document.getElementById('pg-uso-personale').checked
+  const cliente={ nome:document.getElementById('pg-cli-nome').value.trim(), email:document.getElementById('pg-cli-email').value.trim(), tel:document.getElementById('pg-cli-tel').value.trim() }
+  if(!uso && !cliente.nome){ alert('Inserisci il nome del cliente (oppure spunta \u0022uso personale\u0022).'); return }
+  const btn=document.getElementById('pg-genera-btn'); btn.disabled=true; const _t=btn.innerHTML; btn.innerHTML='\u23f3 Creo il pagamento...'
+  const out=document.getElementById('pg-risultato'); out.innerHTML=''
+  try{
+    const r=await db.functions.invoke('crea-pagamento',{ body:{ prodottoId:p.id, area:'doc', venditoreId:(MIO_D&&MIO_D._id)||'', venditoreNome:(MIO_D&&MIO_D.nome)||'', usoPersonale:uso, cliente:cliente } })
+    const d=r.data||{}
+    if(r.error||d.error||!d.url){ throw new Error(d.error||(r.error&&r.error.message)||'Errore creazione pagamento') }
+    const url=d.url
+    out.innerHTML='<div style="background:var(--bg);border:1px solid var(--green);border-radius:8px;padding:12px">'
+      +'<div style="font-weight:700;margin-bottom:8px">\u2705 Link di pagamento pronto ('+_eur(d.importo)+')</div>'
+      +'<input id="pg-url" type="text" readonly value="'+esc(url)+'" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:13px">'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+      +'<button class="btn btn-sm" onclick="_pgCopy()">\ud83d\udccb Copia link</button>'
+      +'<a class="btn btn-sm" href="https://wa.me/?text='+encodeURIComponent('Ecco il link per il pagamento: '+url)+'" target="_blank" rel="noopener">\ud83d\udcf2 Invia su WhatsApp</a>'
+      +'<a class="btn btn-sm" href="'+esc(url)+'" target="_blank" rel="noopener">\ud83d\udcb3 Fai pagare ora</a>'
+      +'</div><div class="muted" style="font-size:12px;margin-top:8px">La vendita comparir\u00e0 qui sotto come \u0022pagata\u0022 appena il cliente completa il pagamento.</div></div>'
+  }catch(e){ out.innerHTML='<div style="color:var(--red);font-weight:600">Errore: '+esc((e&&e.message)||e)+'</div>' }
+  btn.disabled=false; btn.innerHTML=_t
+}
+function _pgCopy(){ const i=document.getElementById('pg-url'); if(!i) return; i.select(); try{ document.execCommand('copy') }catch(e){}; if(navigator.clipboard) navigator.clipboard.writeText(i.value).catch(()=>{}) }
+async function caricaMieiPagamenti(){
+  const box=document.getElementById('pg-lista'); if(!box) return
+  try{
+    const r=await db.from('pagamenti').select('*').order('created_at',{ascending:false}).limit(100)
+    if(r.error) throw r.error
+    const rows=r.data||[]
+    if(!rows.length){ box.innerHTML='<p class="muted">Ancora nessuna vendita.</p>'; return }
+    box.innerHTML=rows.map(function(p){
+      const pagato=p.stato==='paid'
+      const badge=pagato?'<span style="background:var(--green);color:#fff;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700">PAGATO</span>':(p.stato==='failed'?'<span style="background:#bbb;color:#fff;padding:2px 8px;border-radius:999px;font-size:12px">fallito</span>':'<span style="background:#e6a700;color:#fff;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700">in attesa</span>')
+      const chi=p.uso_personale?'<span class="muted">(uso personale)</span>':esc(p.cliente_nome||'\u2014')
+      const prov=p.uso_personale?'':(' \u00b7 provv. '+_eur(p.provvigione_importo))
+      const data=(p.created_at||'').slice(0,10)
+      return '<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div><b>'+esc(p.prodotto_nome||'')+'</b> \u00b7 '+chi+'</div>'+badge+'</div><div class="muted" style="font-size:13px;margin-top:4px">'+_eur(p.importo_pagato)+prov+' \u00b7 '+data+'</div></div>'
+    }).join('')
+  }catch(e){ box.innerHTML='<p style="color:var(--red)">Errore caricamento: '+esc((e&&e.message)||e)+'</p>' }
+}
 
 // ===== BLOCCO 2: Note + allegati condivisi (Realtime broadcast su 'presenza-lezioni') =====
 const _lvRuolo='docente'
