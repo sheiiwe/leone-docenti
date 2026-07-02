@@ -305,7 +305,8 @@
         <div style="flex:1;min-width:130px"><label class="muted" style="font-size:13px;font-weight:600">Telefono</label><input id="pg-cli-tel" type="tel" placeholder="+39 333 0000000" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-top:4px;background:var(--card);color:var(--text)"></div>
       </div>
     </div>
-    <div id="pg-preview" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:14px;margin:12px 0">Seleziona un prodotto.</div>
+    <div style="margin:12px 0"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Metodo di pagamento</label><select id="pg-metodo" style="width:100%;padding:11px;border:1px solid rgba(0,0,0,.15);border-radius:9px;font-family:inherit;background:#fff"><option value="carta">Carta di credito (SumUp)</option><option value="paypal">PayPal</option></select></div>
+        <div id="pg-preview" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:14px;margin:12px 0">Seleziona un prodotto.</div>
     <button class="btn" id="pg-genera-btn" onclick="generaPagamento()" style="font-weight:700">💳 Genera link di pagamento</button>
     <div id="pg-risultato" style="margin-top:14px"></div>
   </div>
@@ -1038,7 +1039,7 @@ async function generaPagamento(){
   const btn=document.getElementById('pg-genera-btn'); btn.disabled=true; const _t=btn.innerHTML; btn.innerHTML='\u23f3 Creo il pagamento...'
   const out=document.getElementById('pg-risultato'); out.innerHTML=''
   try{
-    const r=await db.functions.invoke('crea-pagamento',{ body:{ prodottoId:p.id, area:'doc', venditoreId:(MIO_D&&MIO_D._id)||'', venditoreNome:(MIO_D&&MIO_D.nome)||'', usoPersonale:uso, cliente:cliente } })
+    const r=await db.functions.invoke('crea-pagamento',{ body:{ prodottoId:p.id, area:'doc', venditoreId:(MIO_D&&MIO_D._id)||'', venditoreNome:(MIO_D&&MIO_D.nome)||'', usoPersonale:uso, metodo:((document.getElementById('pg-metodo')||{}).value||'carta'), cliente:cliente } })
     const d=r.data||{}
     if(r.error||d.error||!d.url){ throw new Error(d.error||(r.error&&r.error.message)||'Errore creazione pagamento') }
     const url=d.url
