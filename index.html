@@ -147,6 +147,11 @@
 
   <div id="prof-msg" class="wrap" style="padding:0"></div>
 
+  <div class="card" id="prof-contratto" style="display:none">
+    <h2>📋 Il tuo contratto</h2>
+    <div id="pf-contratto-box"></div>
+  </div>
+
   <div class="card">
     <h2>I tuoi dati</h2>
     <div class="row">
@@ -515,13 +520,36 @@ function renderProfilo(){
   document.getElementById('pf-indirizzo').value=d.indirizzo||''
   document.querySelectorAll('.pf-grado').forEach(c=>{ c.checked=(d.livelli||[]).includes(c.value) })
   _materie=Array.isArray(d.materie)?d.materie.map(_normMat):[]
+  _renderContrattoDoc(d.contratto||{})
   _certi=Array.isArray(d.certificati)?[...d.certificati]:[]
   _certiFile=Array.isArray(d.certificatiFile)?[...d.certificatiFile]:[]
   _foto=d.foto||''
   renderMaterie(); renderCerti(); renderAvatar()
 }
 function renderAvatar(){ const a=document.getElementById('pf-avatar'); a.innerHTML=_foto?('<img src="'+_foto+'">'):'👤' }
-function _normMat(m){ if(typeof m==='string') return {nome:m, livelli:['E','M','S']}; return {nome:(m&&m.nome)||'', livelli:(m&&Array.isArray(m.livelli))?m.livelli:['E','M','S']} }
+function _renderContrattoDoc(c){
+  const box=document.getElementById('prof-contratto'); const inner=document.getElementById('pf-contratto-box')
+  if(!box||!inner) return
+  if(!c || !c.fine){ box.style.display='none'; return }
+  box.style.display='block'
+  const oggi=new Date(); oggi.setHours(0,0,0,0)
+  const fine=new Date(c.fine+'T00:00:00')
+  const gg=Math.floor((fine.getTime()-oggi.getTime())/86400000)
+  let alertBox=''
+  if(gg<0){ alertBox='<div style="padding:10px 12px;border-radius:8px;margin-bottom:10px;background:#fee;color:#c0392b;border:1px solid #f5c6cb;font-size:13px">⚠️ <strong>Contratto scaduto</strong> il '+fine.toLocaleDateString('it-IT')+'. Contatta Leone Consulting per il rinnovo.</div>' }
+  else if(gg<=30){ alertBox='<div style="padding:10px 12px;border-radius:8px;margin-bottom:10px;background:#fff3cd;color:#856404;border:1px solid #ffeaa7;font-size:13px">⚠️ <strong>Contratto in scadenza</strong>: mancano '+gg+' giorni. Contatta Leone Consulting per il rinnovo.</div>' }
+  const inizio = c.inizio ? new Date(c.inizio+'T00:00:00').toLocaleDateString('it-IT') : '—'
+  const fineStr = fine.toLocaleDateString('it-IT')
+  const rin = (c.rinnovi||[])
+  let rinHtml=''
+  if(rin.length){
+    rinHtml='<div style="margin-top:12px"><div style="font-weight:600;font-size:13px;color:var(--text2);margin-bottom:6px">Rinnovi effettuati</div>'
+    rin.forEach((r,i)=>{ const dt=r.data||'—'; const l=r.pdf_path?(' · <a href="'+SUPA_URL+'/storage/v1/object/public/contratti/'+esc(r.pdf_path)+'" target="_blank" style="color:var(--blu);text-decoration:none">📄 PDF</a>'):''; rinHtml+='<div style="padding:5px 10px;background:var(--surface2);border-radius:6px;margin-bottom:4px;font-size:12px">Rinnovo #'+(i+1)+' · '+esc(dt)+l+'</div>' })
+    rinHtml+='</div>'
+  }
+  inner.innerHTML=alertBox+'<div style="display:flex;gap:20px;flex-wrap:wrap"><div><div style="font-size:11px;color:var(--text2)">Data inizio</div><div style="font-weight:600">'+inizio+'</div></div><div><div style="font-size:11px;color:var(--text2)">Valido fino a</div><div style="font-weight:600">'+fineStr+'</div></div><div><div style="font-size:11px;color:var(--text2)">Rinnovi</div><div style="font-weight:600">'+rin.length+'</div></div></div>'+rinHtml
+}
+
 function renderMaterie(){
   const box=document.getElementById('pf-materie'); if(!box) return
   box.innerHTML=_materie.map((m,i)=>{
