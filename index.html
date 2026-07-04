@@ -75,6 +75,7 @@
     <button class="btn" id="nv-listino" onclick="vai('listino')">💶 Listino</button>
     <button class="btn" id="nv-doccom" onclick="vai('doccom')">📁 Documenti</button>
     <button class="btn" id="nv-lezioni" onclick="vai('lezioni')">📚 Lezioni</button>
+    <button class="btn" id="nv-studenti" onclick="vai('studenti')">🎓 Miei studenti</button>
     <button class="btn" id="nv-chat" onclick="vai('chat')">💬 Chat</button>
     <button class="btn" id="nv-video" onclick="vai('video')">🎥 Video</button>
     <button class="btn" id="nv-pagamenti" onclick="vai('pagamenti')">💳 Pagamenti</button>
@@ -244,6 +245,14 @@
 </div>
 
 <!-- ====== CHAT CON STUDENTI ====== -->
+<div id="screen-studenti" class="wrap hidden">
+  <div class="card">
+    <h2>🎓 I miei studenti</h2>
+    <p class="muted" style="margin:0 0 12px">Elenco degli studenti a te assegnati, con la materia e le ore pattuite/svolte.</p>
+    <div id="miei-studenti-lista"><div class="muted">Caricamento…</div></div>
+  </div>
+</div>
+
 <div id="screen-chat" class="wrap hidden">
   <div class="card">
     <h2>Chat con gli studenti</h2>
@@ -534,7 +543,7 @@ async function inviaCandidatura(){
 
 
 // ---- NAVIGAZIONE SEZIONI ----
-const _NV=['profilo','calendario','bacheca','listino','doccom','lezioni','chat','video','pagamenti']
+const _NV=['profilo','calendario','bacheca','listino','doccom','lezioni','studenti','chat','video','pagamenti']
 function vai(t){
   _NV.forEach(s=>{ const b=document.getElementById('nv-'+s); if(b) b.classList.toggle('tab-on', s===t); const sc=document.getElementById('screen-'+s); if(sc) sc.classList.toggle('hidden', s!==t) })
   window.scrollTo({top:0})
@@ -544,6 +553,7 @@ function vai(t){
   if(t==='calendario') renderCalendario()
   if(t==='lezioni'){ renderLezioniDocForm(); caricaLezioniDoc() }
   if(t==='chat'){ caricaMieiStudenti().then(()=>renderChatPicker()) }
+  if(t==='studenti'){ caricaMieiStudenti().then(renderMieiStudenti) }
   if(t==='video') renderVideoPicker()
   if(t==='pagamenti'){ caricaProdottiVendibili(); caricaMieiPagamenti() }
   if(t!=='video') chiudiVideoDoc()
@@ -830,10 +840,43 @@ async function caricaMieiStudenti(){
     const r=await db.from('studenti').select('*')
     if(r.error) _studErr=(r.error.message||String(r.error))
     _studLetti=(r.data||[]).length
-    MIEI_STUDENTI=(r.data||[]).map(x=>({_id:x.id,...x.data})).filter(s=>String(s.docenteId||'')===String(MIO_D._id))
+    MIEI_STUDENTI=(r.data||[]).map(x=>({_id:x.id,...x.data})).filter(s=>{
+      if(String(s.docenteId||'')===String(MIO_D._id)) return true
+      if(Array.isArray(s.docenti) && s.docenti.some(d=>d&&String(d.docenteId||'')===String(MIO_D._id))) return true
+      return false
+    })
   }catch(e){ _studErr=(e&&e.message)||String(e); MIEI_STUDENTI=[] }
 }
-async function _refreshStudenti(){ await caricaMieiStudenti(); try{renderStudPresenza()}catch(e){}; try{renderChatPicker()}catch(e){} }
+async function _refreshStudenti(){ await caricaMieiStudenti(); try{renderStudPresenza()}catch(e){}; try{renderChatPicker()}catch(e){}; try{renderMieiStudenti()}catch(e){} }
+function renderMieiStudenti(){
+  const box=document.getElementById('miei-studenti-lista'); if(!box) return
+  if(!MIEI_STUDENTI||!MIEI_STUDENTI.length){ box.innerHTML='<div class="muted">Nessuno studente collegato al momento.</div>'; return }
+  const mioId=String((MIO_D&&MIO_D._id)||'')
+  const righe=MIEI_STUDENTI.map(s=>{
+    let materia='', oreTot='', oreFatte='', oreRes=''
+    if(Array.isArray(s.docenti)){
+      const mio=s.docenti.find(d=>d&&String(d.docenteId)===mioId)
+      if(mio){ materia=mio.materia||''; oreTot=(mio.oreTot!=null?mio.oreTot:''); oreFatte=(mio.oreFatte!=null?mio.oreFatte:''); const res=Math.max(0,(Number(oreTot)||0)-(Number(oreFatte)||0)); oreRes = (oreTot!=='' ? res : '') }
+    }
+    const contatti=[s.tel?('\u260E '+esc(s.tel)):'', s.email?('\u2709 '+esc(s.email)):''].filter(Boolean).join(' \u00b7 ')
+    return '<div class="card" style="padding:12px;margin-bottom:10px">'+
+      '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">'+
+        '<div style="flex:1;min-width:180px"><div style="font-weight:700">'+esc(s.nome||'\u2014')+'</div>'+
+        (s.livello||s.classe?'<div style="font-size:12px;color:var(--text2);margin-top:2px">'+esc([s.livello,s.classe].filter(Boolean).join(' \u00b7 '))+'</div>':'')+
+        (contatti?'<div style="font-size:12px;color:var(--text2);margin-top:4px">'+contatti+'</div>':'')+
+        '</div>'+
+        (materia?'<div style="text-align:right"><div style="font-size:11px;color:var(--text2)">Materia</div><div style="font-weight:600;color:var(--blu)">'+esc(materia)+'</div></div>':'')+
+      '</div>'+
+      (oreTot!==''?
+        '<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border);display:flex;gap:16px;font-size:12px;flex-wrap:wrap">'+
+          '<div><span style="color:var(--text2)">Ore totali:</span> <b>'+oreTot+'</b></div>'+
+          '<div><span style="color:var(--text2)">Svolte:</span> <b>'+oreFatte+'</b></div>'+
+          '<div><span style="color:var(--text2)">Residue:</span> <b style="color:'+(oreRes>0?'var(--green)':'var(--text2)')+'">'+oreRes+'</b></div>'+
+        '</div>' : '')+
+    '</div>'
+  })
+  box.innerHTML=righe.join('')
+}
 function _optStudenti(conTutti){
   let o = conTutti ? '<option value="__all__">— Tutti i miei studenti —</option>' : '<option value="">— Scegli studente —</option>'
   o += MIEI_STUDENTI.map(s=>'<option value="'+s._id+'">'+esc(s.nome||s.email||'Studente')+'</option>').join('')
