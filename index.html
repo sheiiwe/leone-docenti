@@ -254,19 +254,50 @@
 </div>
 
 <div id="screen-chat" class="wrap hidden">
-  <div class="card">
-    <h2>Chat con gli studenti</h2>
-    <label class="fld"><span>Studente</span><select id="chat-stud" onchange="apriChatDoc()"></select></label>
-    <div id="chat-msgs" class="chatbox" style="margin-top:12px"><div class="empty">Seleziona uno studente per iniziare.</div></div>
-    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:10px">
-      <textarea id="chat-in" placeholder="Scrivi un messaggio..." style="min-height:44px" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();inviaMessaggioDoc()}"></textarea>
-      <label class="iconbtn" title="Allega file">📎<input type="file" id="chat-file" class="hidden" onchange="inviaAllegatoChatDoc(this)"></label>
-      <button class="btn btn-p" onclick="inviaMessaggioDoc()" style="height:44px">Invia</button>
+  <div class="card" style="padding:0;overflow:hidden">
+    <div id="chat-wrap" style="display:flex;min-height:520px;max-height:70vh">
+      <!-- Elenco conversazioni -->
+      <div id="chat-list" style="width:260px;min-width:220px;border-right:1px solid var(--border);display:flex;flex-direction:column;background:var(--surface2)">
+        <div style="padding:12px 14px;border-bottom:1px solid var(--border);font-weight:700">Conversazioni</div>
+        <input id="chat-search" type="text" placeholder="🔍 Cerca studente..." oninput="renderChatPicker()" style="margin:8px 10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px">
+        <div id="chat-list-items" style="flex:1;overflow:auto"></div>
+      </div>
+      <!-- Chat aperta -->
+      <div id="chat-pane" style="flex:1;display:flex;flex-direction:column;min-width:0">
+        <div id="chat-header" style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:#fff">
+          <button id="chat-back" onclick="chatBackDoc()" style="display:none;background:none;border:none;font-size:20px;cursor:pointer;padding:2px 6px" title="Torna all'elenco">←</button>
+          <div id="chat-title" style="font-weight:700;flex:1">Seleziona uno studente</div>
+        </div>
+        <div id="chat-msgs" class="chatbox" style="flex:1;overflow:auto;padding:14px"><div class="empty">Seleziona una conversazione dall'elenco a sinistra.</div></div>
+        <div id="chat-inputrow" style="display:none;gap:8px;align-items:flex-end;padding:10px;border-top:1px solid var(--border);background:#fff">
+          <textarea id="chat-in" placeholder="Scrivi un messaggio..." style="min-height:44px;flex:1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();inviaMessaggioDoc()}"></textarea>
+          <label class="iconbtn" title="Allega file" style="cursor:pointer">📎<input type="file" id="chat-file" class="hidden" onchange="inviaAllegatoChatDoc(this)"></label>
+          <button class="btn btn-p" onclick="inviaMessaggioDoc()" style="height:44px">Invia</button>
+        </div>
+        <div id="chat-stato" class="muted" style="padding:6px 14px;font-size:11px"></div>
+      </div>
     </div>
-    <div id="chat-stato" class="muted" style="margin-top:6px"></div>
   </div>
   <div class="foot">Leone Consulting di Leonardo Angelucci · Velletri (RM)</div>
 </div>
+<style>
+.chat-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:0.5px solid var(--border);cursor:pointer}
+.chat-row:hover{background:rgba(24,95,165,.05)}
+.chat-row.on{background:rgba(24,95,165,.10)}
+.chat-av{width:36px;height:36px;border-radius:50%;background:var(--blu);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0}
+.chat-row .meta{flex:1;min-width:0}
+.chat-row .nm{font-weight:600;font-size:14px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-row .pv{font-size:12px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+.chat-row .tm{font-size:10px;color:var(--text3);flex-shrink:0}
+.chat-row .un{background:var(--red);color:#fff;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:700;margin-left:6px}
+@media(max-width:720px){
+  #chat-wrap{position:relative}
+  #chat-list{width:100%;min-width:0}
+  #chat-pane{position:absolute;inset:0;background:#fff;transform:translateX(100%);transition:transform .2s}
+  #chat-pane.open{transform:translateX(0)}
+  #chat-back{display:inline-block !important}
+}
+</style>
 
 <!-- ====== VIDEOCHIAMATA ====== -->
 <div id="screen-video" class="wrap hidden">
@@ -566,7 +597,7 @@ function vai(t){
   if(t==='doccom') caricaDocCommDoc()
   if(t==='calendario') renderCalendario()
   if(t==='lezioni'){ renderLezioniDocForm(); caricaLezioniDoc() }
-  if(t==='chat'){ caricaMieiStudenti().then(()=>renderChatPicker()) }
+  if(t==='chat'){ _initChatDoc() }
   if(t==='studenti'){ caricaMieiStudenti().then(renderMieiStudenti) }
   if(t==='video') renderVideoPicker()
   if(t==='pagamenti'){ caricaProdottiVendibili(); caricaMieiPagamenti() }
@@ -985,24 +1016,65 @@ async function eliminaLezione(id){
 
 // ===== CHAT =====
 let _chatSubDoc=null, _chatStudCur=null
-function renderChatPicker(){
-  const sel=document.getElementById('chat-stud'); if(!sel) return
-  const cur=sel.value
-  sel.innerHTML=_optStudenti(false); if(cur) sel.value=cur
-  if(!MIEI_STUDENTI.length){ document.getElementById('chat-msgs').innerHTML='<div class="empty">Non hai ancora studenti assegnati. Li assegna Leone Consulting dall\u0027app.</div>' }
+let _CHAT_LAST={}, _CHAT_UNREAD={}, _chatSubGlobalDoc=null
+function _chatFmtTm(iso){ if(!iso) return ''; const d=new Date(iso), n=new Date(); const h=String(d.getHours()).padStart(2,'0'), m=String(d.getMinutes()).padStart(2,'0'); if(d.toDateString()===n.toDateString()) return h+':'+m; const g=d.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit'}); return g }
+async function _chatCaricaUltimi(){
+  try{ const r=await db.from('messaggi').select('id,created_at,data').order('created_at',{ascending:false}).limit(500)
+    _CHAT_LAST={}
+    ;(r.data||[]).forEach(x=>{ const m=x.data||{}; const em=(m.studenteEmail||'').toLowerCase(); if(!em) return
+      if(!_CHAT_LAST[em]) _CHAT_LAST[em]={ ts:x.created_at, testo:m.testo||(m.fileName?('📎 '+m.fileName):''), da:m.da }
+    })
+  }catch(e){}
 }
-async function apriChatDoc(){
-  const sel=document.getElementById('chat-stud'); const sid=sel.value
-  const box=document.getElementById('chat-msgs')
-  if(!sid){ box.innerHTML='<div class="empty">Seleziona uno studente per iniziare.</div>'; _chatStudCur=null; return }
-  _chatStudCur=_studById(sid)
-  box.innerHTML='<div class="empty">Caricamento…</div>'
+function renderChatPicker(){
+  const box=document.getElementById('chat-list-items'); if(!box) return
+  if(!MIEI_STUDENTI||!MIEI_STUDENTI.length){ box.innerHTML='<div class="empty" style="padding:20px;text-align:center;color:var(--text2);font-size:12px">Nessuno studente assegnato ancora.</div>'; return }
+  const q=(document.getElementById('chat-search')&&document.getElementById('chat-search').value||'').trim().toLowerCase()
+  // Ordina: con conversazione (più recente in cima), poi senza conversazione (alfabetico)
+  const withLast=[], without=[]
+  MIEI_STUDENTI.forEach(s=>{ const em=(s.email||'').toLowerCase(); const last=_CHAT_LAST[em]; if(last) withLast.push({s,last}); else without.push({s}) })
+  withLast.sort((a,b)=>(b.last.ts||'').localeCompare(a.last.ts||''))
+  without.sort((a,b)=>((a.s.nome||'').localeCompare(b.s.nome||'','it')))
+  let items=[...withLast, ...without]
+  if(q) items=items.filter(x=>((x.s.nome||'')+' '+(x.s.email||'')).toLowerCase().includes(q))
+  if(!items.length){ box.innerHTML='<div class="empty" style="padding:20px;text-align:center;color:var(--text2);font-size:12px">Nessun risultato</div>'; return }
+  const curId=_chatStudCur?_chatStudCur._id:null
+  box.innerHTML=items.map(x=>{
+    const em=(x.s.email||'').toLowerCase()
+    const last=x.last, unr=_CHAT_UNREAD[em]||0
+    const pv=last?(esc(last.testo||'').slice(0,50)+((last.testo||'').length>50?'…':'')):'<i style="color:var(--text3)">Nessun messaggio</i>'
+    const tm=last?_chatFmtTm(last.ts):''
+    const on=(curId===x.s._id)?' on':''
+    const av=(x.s.nome||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()
+    return '<div class="chat-row'+on+'" onclick="apriChatDocDa(\''+x.s._id+'\')"><div class="chat-av">'+esc(av)+'</div><div class="meta"><div class="nm">'+esc(x.s.nome||'?')+'</div><div class="pv">'+pv+'</div></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span class="tm">'+esc(tm)+'</span>'+(unr>0?'<span class="un">'+unr+'</span>':'')+'</div></div>'
+  }).join('')
+}
+async function apriChatDocDa(sid){
+  _chatStudCur=_studById(sid); if(!_chatStudCur) return
+  const em=(_chatStudCur.email||'').toLowerCase()
+  _CHAT_UNREAD[em]=0
+  document.getElementById('chat-title').textContent=_chatStudCur.nome||'Studente'
+  document.getElementById('chat-inputrow').style.display='flex'
+  document.getElementById('chat-pane').classList.add('open')
+  const box=document.getElementById('chat-msgs'); box.innerHTML='<div class="empty">Caricamento…</div>'
   await caricaMessaggiDoc()
-  if(!_chatSubDoc){
-    _chatSubDoc=db.channel('chat-doc-'+_docEmail()).on('postgres_changes',{event:'INSERT',schema:'public',table:'messaggi'}, payload=>{
-      const m=payload.new&&payload.new.data; if(!m||!_chatStudCur) return
-      const se=(m.studenteEmail||'').toLowerCase()
-      if(se===((_chatStudCur.email||'').toLowerCase())){ _appendMsgDoc({_id:payload.new.id,created:payload.new.created_at,...m}); _scrollChatDoc() }
+  renderChatPicker()
+}
+function chatBackDoc(){ document.getElementById('chat-pane').classList.remove('open') }
+
+async function apriChatDoc(){ /* mantenuta per retrocompat */ }
+async function _initChatDoc(){
+  await caricaMieiStudenti(); await _chatCaricaUltimi(); renderChatPicker()
+  if(!_chatSubGlobalDoc){
+    _chatSubGlobalDoc=db.channel('chat-global-doc-'+_docEmail()).on('postgres_changes',{event:'INSERT',schema:'public',table:'messaggi'}, payload=>{
+      const m=payload.new&&payload.new.data; if(!m) return
+      const em=(m.studenteEmail||'').toLowerCase()
+      _CHAT_LAST[em]={ ts:payload.new.created_at, testo:m.testo||(m.fileName?('📎 '+m.fileName):''), da:m.da }
+      // Se non è la chat aperta, incremento non letto (solo messaggi non miei)
+      const isOpen=_chatStudCur && ((_chatStudCur.email||'').toLowerCase()===em)
+      if(!isOpen && m.da!=='docente'){ _CHAT_UNREAD[em]=(_CHAT_UNREAD[em]||0)+1 }
+      if(isOpen){ _appendMsgDoc({_id:payload.new.id,created:payload.new.created_at,...m}); _scrollChatDoc() }
+      renderChatPicker()
     }).subscribe()
   }
 }
