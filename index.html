@@ -268,8 +268,8 @@
           <button id="chat-back" onclick="chatBackDoc()" style="display:none;background:none;border:none;font-size:20px;cursor:pointer;padding:2px 6px" title="Torna all'elenco">←</button>
           <div id="chat-title" style="font-weight:700;flex:1">Seleziona uno studente</div>
         </div>
-        <div id="chat-msgs" class="chatbox" style="flex:1;overflow:auto;padding:14px"><div class="empty">Seleziona una conversazione dall'elenco a sinistra.</div></div>
-        <div id="chat-inputrow" style="display:none;gap:8px;align-items:flex-end;padding:10px;border-top:1px solid var(--border);background:#fff">
+        <div id="chat-msgs" style="flex:1;overflow:auto;padding:14px"><div class="empty">Seleziona una conversazione dall'elenco a sinistra.</div></div>
+        <div id="chat-inputrow" style="gap:8px;align-items:flex-end;padding:10px;border-top:1px solid var(--border);background:#fff">
           <textarea id="chat-in" placeholder="Scrivi un messaggio..." style="min-height:44px;flex:1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();inviaMessaggioDoc()}"></textarea>
           <label class="iconbtn" title="Allega file" style="cursor:pointer">📎<input type="file" id="chat-file" class="hidden" onchange="inviaAllegatoChatDoc(this)"></label>
           <button class="btn btn-p" onclick="inviaMessaggioDoc()" style="height:44px">Invia</button>
@@ -281,6 +281,12 @@
   <div class="foot">Leone Consulting di Leonardo Angelucci · Velletri (RM)</div>
 </div>
 <style>
+#screen-chat .card{padding:0;overflow:hidden}
+#screen-chat #chat-wrap{display:flex;min-height:520px;max-height:70vh}
+#screen-chat #chat-msgs{display:block;height:auto;flex:1;overflow:auto;padding:14px;background:var(--bg)}
+#screen-chat #chat-inputrow{display:none}
+#screen-chat #chat-inputrow.on{display:flex}
+#screen-chat #chat-search{box-sizing:border-box;width:calc(100% - 20px)}
 .chat-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:0.5px solid var(--border);cursor:pointer}
 .chat-row:hover{background:rgba(24,95,165,.05)}
 .chat-row.on{background:rgba(24,95,165,.10)}
@@ -291,11 +297,11 @@
 .chat-row .tm{font-size:10px;color:var(--text3);flex-shrink:0}
 .chat-row .un{background:var(--red);color:#fff;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:700;margin-left:6px}
 @media(max-width:720px){
-  #chat-wrap{position:relative}
-  #chat-list{width:100%;min-width:0}
-  #chat-pane{position:absolute;inset:0;background:#fff;transform:translateX(100%);transition:transform .2s}
-  #chat-pane.open{transform:translateX(0)}
-  #chat-back{display:inline-block !important}
+  #screen-chat #chat-wrap{position:relative}
+  #screen-chat #chat-list{width:100%;min-width:0}
+  #screen-chat #chat-pane{position:absolute;inset:0;background:#fff;transform:translateX(100%);transition:transform .2s}
+  #screen-chat #chat-pane.open{transform:translateX(0)}
+  #screen-chat #chat-back{display:inline-block !important}
 }
 </style>
 
@@ -1054,7 +1060,7 @@ async function apriChatDocDa(sid){
   const em=(_chatStudCur.email||'').toLowerCase()
   _CHAT_UNREAD[em]=0
   document.getElementById('chat-title').textContent=_chatStudCur.nome||'Studente'
-  document.getElementById('chat-inputrow').style.display='flex'
+  document.getElementById('chat-inputrow').classList.add('on')
   document.getElementById('chat-pane').classList.add('open')
   const box=document.getElementById('chat-msgs'); box.innerHTML='<div class="empty">Caricamento…</div>'
   await caricaMessaggiDoc()
