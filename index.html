@@ -461,16 +461,30 @@ function renderProfilo(){
   document.getElementById('pf-citta').value=d.citta||''
   document.getElementById('pf-indirizzo').value=d.indirizzo||''
   document.querySelectorAll('.pf-grado').forEach(c=>{ c.checked=(d.livelli||[]).includes(c.value) })
-  _materie=Array.isArray(d.materie)?[...d.materie]:[]
+  _materie=Array.isArray(d.materie)?d.materie.map(_normMat):[]
   _certi=Array.isArray(d.certificati)?[...d.certificati]:[]
   _certiFile=Array.isArray(d.certificatiFile)?[...d.certificatiFile]:[]
   _foto=d.foto||''
   renderMaterie(); renderCerti(); renderAvatar()
 }
 function renderAvatar(){ const a=document.getElementById('pf-avatar'); a.innerHTML=_foto?('<img src="'+_foto+'">'):'👤' }
-function renderMaterie(){ document.getElementById('pf-materie').innerHTML=_materie.map((m,i)=>'<span class="chip">'+esc(m)+' <b onclick="delMateria('+i+')">×</b></span>').join('') }
-function addMateria(){ const i=document.getElementById('pf-materia-in'); const v=(i.value||'').trim(); if(v&&!_materie.some(x=>x.toLowerCase()===v.toLowerCase())){ _materie.push(v); renderMaterie() } i.value=''; i.focus() }
+function _normMat(m){ if(typeof m==='string') return {nome:m, livelli:['E','M','S']}; return {nome:(m&&m.nome)||'', livelli:(m&&Array.isArray(m.livelli))?m.livelli:['E','M','S']} }
+function renderMaterie(){
+  const box=document.getElementById('pf-materie'); if(!box) return
+  box.innerHTML=_materie.map((m,i)=>{
+    const nm=(typeof m==='string')?m:(m&&m.nome)||''
+    const lv=(m&&Array.isArray(m.livelli))?m.livelli:['E','M','S']
+    const btns=['E','M','S'].map(k=>{
+      const on=lv.indexOf(k)>=0
+      const lbl={E:'Elementari',M:'Medie',S:'Superiori'}[k]
+      return '<button type="button" onclick="toggleLiv('+i+',\''+k+'\')" title="'+lbl+'" style="border:none;padding:2px 7px;border-radius:8px;cursor:pointer;font-size:10px;font-weight:600;font-family:inherit;background:'+(on?'var(--blu)':'#e5e5e0')+';color:'+(on?'#fff':'#999')+'">'+k+'</button>'
+    }).join('')
+    return '<span class="chip" style="display:inline-flex;align-items:center;gap:8px;padding:5px 10px"><b>'+esc(nm)+'</b><span style="display:flex;gap:4px">'+btns+'</span><b style="cursor:pointer;color:#c0392b" onclick="delMateria('+i+')">\u00d7</b></span>'
+  }).join('')
+}
+function addMateria(){ const i=document.getElementById('pf-materia-in'); const v=(i.value||'').trim(); if(v&&!_materie.some(x=>((typeof x==='string')?x:x.nome).toLowerCase()===v.toLowerCase())){ _materie.push({nome:v, livelli:['E','M','S']}); renderMaterie() } i.value=''; i.focus() }
 function delMateria(i){ _materie.splice(i,1); renderMaterie() }
+function toggleLiv(i,k){ if(!_materie[i]) return; _materie[i]=_normMat(_materie[i]); const arr=_materie[i].livelli; const p=arr.indexOf(k); if(p>=0) arr.splice(p,1); else arr.push(k); _materie[i].livelli=['E','M','S'].filter(x=>arr.indexOf(x)>=0); renderMaterie() }
 function renderCerti(){
   const box=document.getElementById('pf-certi'); let h=''
   _certi.forEach((c,i)=>{ const f=_certiFile.find(x=>x.nome===c); h+='<div class="cert-item"><span>📄 '+esc(c)+(f?' — <a href="'+esc(f.url)+'" target="_blank">apri file</a>':'')+'</span><b style="cursor:pointer;color:var(--red)" onclick="delCert('+i+')">×</b></div>' })
@@ -917,7 +931,7 @@ async function lzAggiungiFile(input){
 function renderLezioniDocForm(){
   const sel=document.getElementById('lz-dest'); if(sel) sel.innerHTML=_optStudenti(true)
   const mat=document.getElementById('lz-materia')
-  if(mat && !mat.value && MIO_D && Array.isArray(MIO_D.materie) && MIO_D.materie.length) mat.value=MIO_D.materie[0]
+  if(mat && !mat.value && MIO_D && Array.isArray(MIO_D.materie) && MIO_D.materie.length){ const m0=MIO_D.materie[0]; mat.value=(typeof m0==='string')?m0:((m0&&m0.nome)||'') }
 }
 async function salvaLezione(){
   const titolo=(document.getElementById('lz-titolo').value||'').trim()
