@@ -527,6 +527,7 @@ function renderProfilo(){
   renderMaterie(); renderCerti(); renderAvatar()
 }
 function renderAvatar(){ const a=document.getElementById('pf-avatar'); a.innerHTML=_foto?('<img src="'+_foto+'">'):'👤' }
+function _normMat(m){ if(typeof m==='string') return {nome:m, livelli:['E','M','S']}; return {nome:(m&&m.nome)||'', livelli:(m&&Array.isArray(m.livelli))?m.livelli:['E','M','S']} }
 function _renderContrattoDoc(c){
   const box=document.getElementById('prof-contratto'); const inner=document.getElementById('pf-contratto-box')
   if(!box||!inner) return
