@@ -923,26 +923,25 @@ async function salvaDisponibilita(){
 async function _syncDispMarketplace(){
   if(!MIO_D || !MIO_D._id) return
   const docId=MIO_D._id
-  // 1) Ricorrenti: cancello e reinserisco (semplice, idempotente)
+  // 1) Ricorrenti: cancello e reinserisco (idempotente). Formato _DISP.ric: "wd:h" (wd 1=lun..7=dom)
   await db.from('docenti_disponibilita').delete().eq('docente_id', docId)
   const inRic=[]
-  ;(_DISP.ric||[]).forEach(r=>{
-    // formato _DISP.ric: {wd, from, to} — wd 1..7 (1=lun, 7=dom) → giorno_settimana 0..6 (0=dom)
-    const gs = (r.wd===7) ? 0 : r.wd
-    if(r.from && r.to && r.from<r.to){ inRic.push({ docente_id:docId, giorno_settimana:gs, ora_inizio:r.from, ora_fine:r.to, attivo:true }) }
+  ;(_DISP.ric||[]).forEach(k=>{
+    const p=String(k).split(':'); const wd=parseInt(p[0],10), h=parseInt(p[1],10)
+    if(!isNaN(wd)&&!isNaN(h)){ inRic.push({ docente_id:docId, giorno_settimana:(wd%7), ora_inizio:h, ora_fine:h+1, attivo:true }) }
   })
   if(inRic.length) await db.from('docenti_disponibilita').insert(inRic)
-  // 2) Eccezioni (add=aperto extra, rem=chiuso): cancello e reinserisco quelle future
+  // 2) Eccezioni: add="YYYY-MM-DD:h" (aperto extra), rem="YYYY-MM-DD:h" (chiuso quell'ora)
   const oggi=new Date().toISOString().slice(0,10)
   await db.from('docenti_eccezioni').delete().eq('docente_id', docId).gte('data', oggi)
   const inEcc=[]
-  ;(_DISP.add||[]).forEach(a=>{
-    // add: {date:'YYYY-MM-DD', from:'HH:MM', to:'HH:MM'}
-    if(a.date>=oggi && a.from && a.to){ inEcc.push({ docente_id:docId, data:a.date, tipo:'aperto', ora_inizio:a.from, ora_fine:a.to }) }
+  ;(_DISP.add||[]).forEach(k=>{
+    const i=String(k).lastIndexOf(':'); if(i<0) return; const date=String(k).slice(0,i), h=parseInt(String(k).slice(i+1),10)
+    if(date>=oggi && !isNaN(h)){ inEcc.push({ docente_id:docId, data:date, tipo:'aperto', ora_inizio:h, ora_fine:h+1 }) }
   })
-  ;(_DISP.rem||[]).forEach(r=>{
-    // rem: {date:'YYYY-MM-DD'} — chiuso tutto il giorno
-    if(r.date>=oggi){ inEcc.push({ docente_id:docId, data:r.date, tipo:'chiuso', motivo:r.motivo||null }) }
+  ;(_DISP.rem||[]).forEach(k=>{
+    const i=String(k).lastIndexOf(':'); if(i<0) return; const date=String(k).slice(0,i), h=parseInt(String(k).slice(i+1),10)
+    if(date>=oggi && !isNaN(h)){ inEcc.push({ docente_id:docId, data:date, tipo:'chiuso', ora_inizio:h, ora_fine:h+1 }) }
   })
   if(inEcc.length) await db.from('docenti_eccezioni').insert(inEcc)
 }
@@ -970,43 +969,63 @@ function filtraPren(f){
 function renderPrenDoc(){
   const box=document.getElementById('prenotazioni-lista'); if(!box) return
   const now=Date.now(), oggi=new Date().toDateString()
-  let list=_PREN_DOC.slice()
+  // 1) Richieste da approvare (orari fuori disponibilità) — sempre in cima
+  const richieste=_PREN_DOC.filter(l=>l.stato==='richiesta' && new Date(l.fine).getTime()>=now)
+  let head=''
+  if(richieste.length){
+    head='<div class="card" style="padding:12px;margin-bottom:12px;border:1px solid var(--blu);background:#eef4fb"><div style="font-weight:700;margin-bottom:8px">📩 Richieste da approvare ('+richieste.length+')</div>'+
+      richieste.map(l=>renderPrenCard(l,true)).join('')+'</div>'
+  }
+  // 2) Lista filtrata (esclude richieste/rifiutate)
+  let list=_PREN_DOC.slice().filter(l=>l.stato!=='richiesta' && l.stato!=='rifiutata')
   if(_PREN_FILTER==='cancellate'){ list=list.filter(l=>String(l.stato||'').indexOf('cancellata')===0) }
   else if(_PREN_FILTER==='oggi'){ list=list.filter(l=>new Date(l.inizio).toDateString()===oggi && String(l.stato||'').indexOf('cancellata')<0) }
-  else if(_PREN_FILTER==='passate'){ list=list.filter(l=>new Date(l.fine).getTime()<now && String(l.stato||'').indexOf('cancellata')<0) }
-  else { list=list.filter(l=>new Date(l.fine).getTime()>=now && String(l.stato||'').indexOf('cancellata')<0) }
-  if(!list.length){ box.innerHTML='<div class="muted">Nessuna prenotazione in questa vista.</div>'; return }
-  box.innerHTML=list.map(l=>{
-    const stu=(MIEI_STUDENTI||[]).find(s=>String(s._id)===String(l.studente_id))
-    const nomeStu=stu?(stu.nome||'?'):(l.studente_nome||'Studente')
-    const d1=new Date(l.inizio), d2=new Date(l.fine)
-    const dataStr=d1.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})
-    const oraStr=d1.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})+' → '+d2.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})
-    const stato=l.stato||'confermata'
-    const badge=stato==='svolta'?'<span class="badge bg">Svolta</span>':(stato.indexOf('cancellata')===0?'<span class="badge br">'+esc(stato.replace('_',' '))+'</span>':'<span class="badge bb">Confermata</span>')
-    const materia=l.materia?(' · '+esc(l.materia)):(l.livello?(' · '+esc(l.livello)):'')
-    // azioni disponibili
-    let az=''
-    if(stato==='confermata'){
-      if(d2.getTime()<now){ az+='<button class="btn btn-sm btn-p" onclick="segnaSvolta(\''+l.id+'\')">Segna svolta</button>' }
-      const oreMancanti=(d1.getTime()-now)/3600000
-      if(d1.getTime()>now){
-        if(oreMancanti>=12){ az+='<button class="btn btn-sm" onclick="cancellaPrenDoc(\''+l.id+'\')" style="color:var(--red)">Cancella</button>' }
-        else{ az+='<span class="muted" style="font-size:11px">Preavviso <12h: chiama lo studente</span>' }
-      }
+  else if(_PREN_FILTER==='passate'){ list=list.filter(l=>(l.stato==='svolta'||l.stato==='no_show'||new Date(l.fine).getTime()<now) && String(l.stato||'').indexOf('cancellata')<0) }
+  else { list=list.filter(l=>new Date(l.fine).getTime()>=now && String(l.stato||'').indexOf('cancellata')<0 && l.stato!=='svolta' && l.stato!=='no_show') }
+  const body = list.length ? list.map(l=>renderPrenCard(l,false)).join('') : '<div class="muted">Nessuna prenotazione in questa vista.</div>'
+  box.innerHTML=head+body
+}
+function renderPrenCard(l, isRichiesta){
+  const now=Date.now()
+  const stu=(MIEI_STUDENTI||[]).find(s=>String(s._id)===String(l.studente_id))
+  const nomeStu=stu?(stu.nome||'?'):(l.studente_nome||'Studente')
+  const d1=new Date(l.inizio), d2=new Date(l.fine)
+  const dataStr=d1.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})
+  const oraStr=d1.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})+' → '+d2.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})
+  const stato=l.stato||'confermata'
+  let badge
+  if(stato==='svolta') badge='<span class="badge bg">Svolta</span>'
+  else if(stato==='no_show') badge='<span class="badge br">Assente</span>'
+  else if(stato==='richiesta') badge='<span class="badge bb">Richiesta</span>'
+  else if(stato==='rifiutata') badge='<span class="badge br">Rifiutata</span>'
+  else if(stato.indexOf('cancellata')===0) badge='<span class="badge br">'+esc(stato.replace('_',' '))+'</span>'
+  else badge='<span class="badge bb">Confermata</span>'
+  const materia=l.materia?(' · '+esc(l.materia)):(l.livello?(' · '+esc(l.livello)):'')
+  let az=''
+  if(isRichiesta){
+    az='<button class="btn btn-sm btn-p" onclick="accettaRichiesta(\''+l.id+'\')">✅ Accetta</button>'+
+       '<button class="btn btn-sm" onclick="rifiutaRichiesta(\''+l.id+'\')" style="color:var(--red)">Rifiuta</button>'
+  } else if(stato==='confermata'){
+    if(d2.getTime()<now){ az+='<button class="btn btn-sm btn-p" onclick="segnaSvolta(\''+l.id+'\')">Segna svolta</button><button class="btn btn-sm" onclick="segnaAssente(\''+l.id+'\')">Studente assente</button>' }
+    const oreMancanti=(d1.getTime()-now)/3600000
+    if(d1.getTime()>now){
+      if(oreMancanti>=12){ az+='<button class="btn btn-sm" onclick="cancellaPrenDoc(\''+l.id+'\')" style="color:var(--red)">Cancella</button>' }
+      else{ az+='<span class="muted" style="font-size:11px">Preavviso <12h: chiama lo studente</span>' }
     }
-    return '<div class="card" style="padding:12px;margin-bottom:8px">'+
-      '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">'+
-        '<div style="flex:1;min-width:180px"><div style="font-weight:700">'+esc(nomeStu)+materia+'</div>'+
-        '<div style="font-size:13px;color:var(--text2);margin-top:2px">'+esc(dataStr)+'</div>'+
-        '<div style="font-size:13px;color:var(--text2)">'+esc(oraStr)+'</div>'+
-        (l.note_studente?'<div style="font-size:12px;color:var(--text3);margin-top:6px;font-style:italic">"'+esc(l.note_studente)+'"</div>':'')+
-        '</div>'+
-        '<div style="text-align:right">'+badge+'</div>'+
+  }
+  const richFlag = isRichiesta ? '<div style="font-size:11px;color:var(--blu);font-weight:600;margin-top:4px">⏱ Orario fuori dalle tue disponibilità</div>':''
+  return '<div class="card" style="padding:12px;margin-bottom:8px'+(isRichiesta?';border:0.5px solid var(--blu);background:#fff':'')+'">'+
+    '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">'+
+      '<div style="flex:1;min-width:180px"><div style="font-weight:700">'+esc(nomeStu)+materia+'</div>'+
+      '<div style="font-size:13px;color:var(--text2);margin-top:2px">'+esc(dataStr)+'</div>'+
+      '<div style="font-size:13px;color:var(--text2)">'+esc(oraStr)+'</div>'+
+      richFlag+
+      (l.note_studente?'<div style="font-size:12px;color:var(--text3);margin-top:6px;font-style:italic">"'+esc(l.note_studente)+'"</div>':'')+
       '</div>'+
-      (az?'<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border);display:flex;gap:6px;flex-wrap:wrap">'+az+'</div>':'')+
-    '</div>'
-  }).join('')
+      '<div style="text-align:right">'+badge+'</div>'+
+    '</div>'+
+    (az?'<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border);display:flex;gap:6px;flex-wrap:wrap">'+az+'</div>':'')+
+  '</div>'
 }
 async function segnaSvolta(id){
   try{
@@ -1020,6 +1039,50 @@ async function cancellaPrenDoc(id){
   try{
     const r=await db.from('lezioni_prenotate').update({stato:'cancellata_docente', updated_at:new Date().toISOString()}).eq('id',id); if(r.error) throw r.error
     try{ await db.from('lezioni_storico').insert({lezione_id:id, azione:'cancellata', eseguita_da:'docente', eseguita_da_id:MIO_D&&MIO_D._id, dati:{motivo:'cancellazione docente'}}) }catch(e){}
+    await caricaPrenotazioniDoc()
+  }catch(e){ alert('Errore: '+((e&&e.message)||e)) }
+}
+async function segnaAssente(id){
+  if(!confirm('Segnare lo studente come ASSENTE (prenotato ma non presentato)?')) return
+  try{
+    const r=await db.from('lezioni_prenotate').update({stato:'no_show', updated_at:new Date().toISOString()}).eq('id',id); if(r.error) throw r.error
+    try{ await db.from('lezioni_storico').insert({lezione_id:id, azione:'no_show', eseguita_da:'docente', eseguita_da_id:MIO_D&&MIO_D._id}) }catch(e){}
+    await caricaPrenotazioniDoc()
+  }catch(e){ alert('Errore: '+((e&&e.message)||e)) }
+}
+async function accettaRichiesta(id){
+  const l=(_PREN_DOC||[]).find(x=>String(x.id)===String(id)); if(!l) return
+  if(!confirm('Accettare questa richiesta? La lezione sarà confermata e lo studente verrà avvisato.')) return
+  try{
+    // per contanti/bonifico creo la richiesta di pagamento al momento dell'accettazione
+    let pagId=l.pagamento_id||null
+    if((l.metodo_pagamento==='contanti'||l.metodo_pagamento==='bonifico') && !pagId){
+      const stu=(MIEI_STUDENTI||[]).find(s=>String(s._id)===String(l.studente_id))
+      const rp=await db.from('pagamenti').insert({
+        prodotto_nome:'Lezione '+(l.materia||'')+' · '+((MIO_D&&MIO_D.nome)||''),
+        prezzo_pieno:l.prezzo_lezione||0, importo_pagato:l.prezzo_lezione||0,
+        area:'stud', metodo:l.metodo_pagamento, stato:'attesa_contanti',
+        studente_id:l.studente_id, cliente_nome:(stu&&stu.nome)||''
+      }).select().single()
+      if(!rp.error) pagId=rp.data&&rp.data.id
+    }
+    const r=await db.from('lezioni_prenotate').update({stato:'confermata', pagamento_id:pagId, updated_at:new Date().toISOString()}).eq('id',id)
+    if(r.error) throw r.error
+    try{ await db.from('lezioni_storico').insert({lezione_id:id, azione:'richiesta_accettata', eseguita_da:'docente', eseguita_da_id:MIO_D&&MIO_D._id}) }catch(e){}
+    await caricaPrenotazioniDoc()
+  }catch(e){
+    const em=((e&&e.message)||String(e)).toLowerCase()
+    if(em.indexOf('disponibile')>=0 || em.indexOf('quel momento')>=0) alert('Non puoi accettare: hai già una lezione confermata in quell\u0027orario.')
+    else alert('Errore: '+((e&&e.message)||e))
+  }
+}
+async function rifiutaRichiesta(id){
+  const l=(_PREN_DOC||[]).find(x=>String(x.id)===String(id))
+  if(!confirm('Rifiutare questa richiesta? Lo studente verrà avvisato.')) return
+  try{
+    const r=await db.from('lezioni_prenotate').update({stato:'rifiutata', updated_at:new Date().toISOString()}).eq('id',id); if(r.error) throw r.error
+    if(l&&l.pagamento_id){ try{ await db.from('pagamenti').delete().eq('id',l.pagamento_id) }catch(e){} }
+    try{ await db.from('lezioni_storico').insert({lezione_id:id, azione:'richiesta_rifiutata', eseguita_da:'docente', eseguita_da_id:MIO_D&&MIO_D._id}) }catch(e){}
     await caricaPrenotazioniDoc()
   }catch(e){ alert('Errore: '+((e&&e.message)||e)) }
 }
