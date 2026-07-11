@@ -1132,7 +1132,7 @@ function renderMieiStudenti(){
     let materia='', oreTot='', oreFatte='', oreRes=''
     if(Array.isArray(s.docenti)){
       const mio=s.docenti.find(d=>d&&String(d.docenteId)===mioId)
-      if(mio){ materia=mio.materia||''; oreTot=(mio.oreTot!=null?mio.oreTot:''); oreFatte=(mio.oreFatte!=null?mio.oreFatte:''); const res=Math.max(0,(Number(oreTot)||0)-(Number(oreFatte)||0)); oreRes = (oreTot!=='' ? res : '') }
+      if(mio){ materia=mio.materia||''; const _bon=Number(mio.oreBonus)||0; const _base=(mio.oreTot!=null?Number(mio.oreTot):null); oreTot=(_base!=null?(_base+_bon):''); oreFatte=(mio.oreFatte!=null?mio.oreFatte:''); const res=Math.max(0,(Number(oreTot)||0)-(Number(oreFatte)||0)); oreRes = (oreTot!=='' ? res : ''); if(_bon) oreTot=oreTot+' (di cui '+_bon+' bonus)' }
     }
     const contatti=[s.tel?('\u260E '+esc(s.tel)):'', s.email?('\u2709 '+esc(s.email)):''].filter(Boolean).join(' \u00b7 ')
     return '<div class="card" style="padding:12px;margin-bottom:10px">'+
