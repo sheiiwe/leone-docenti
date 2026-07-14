@@ -1508,13 +1508,18 @@ function _pgPreview(){
   if(!p){ el.innerHTML='Seleziona un prodotto.'; return }
   const uso=document.getElementById('pg-uso-personale').checked
   const prezzo=Number(p.prezzo||0), pct=Number(p.provvigione_pct||0)
+  // la provvigione NON si calcola sull'IVA che l'azienda gira al fornitore
+  // l'IVA non entra nella provvigione: quei soldi vanno al fornitore
+  const _iva=Number(p.iva||0)
+  const _tot=prezzo*(1+_iva/100)   // quanto paga davvero il cliente
+  const _base=prezzo               // su cui si calcola la provvigione
   const _pf=p.provvigione_fissa
   const hasFissa=_pf!=null && _pf!=='' && Number(_pf)>0
-  const prov=hasFissa?(Math.round(Number(_pf)*100)/100):(Math.round(prezzo*pct)/100)
+  const prov=hasFissa?(Math.round(Number(_pf)*100)/100):(Math.round(_base*pct)/100)
   if(uso){
-    el.innerHTML='<b>Uso personale</b> \u00b7 tu paghi <b>'+_eur(prezzo-prov)+'</b> <span class="muted">(prezzo '+_eur(prezzo)+' meno la tua provvigione '+_eur(prov)+')</span>'
+    el.innerHTML='<b>Uso personale</b> \u00b7 tu paghi <b>'+_eur(_tot-prov)+'</b> <span class="muted">(prezzo '+_eur(_tot)+' meno la tua provvigione '+_eur(prov)+')</span>'
   } else {
-    el.innerHTML='Il cliente paga <b>'+_eur(prezzo)+'</b> \u00b7 la tua provvigione: <b>'+_eur(prov)+'</b>'+(hasFissa?'':' ('+pct+'%)')
+    el.innerHTML='Il cliente paga <b>'+_eur(_tot)+'</b> \u00b7 la tua provvigione: <b>'+_eur(prov)+'</b>'+(hasFissa?'':' ('+pct+'%)')
   }
 }
 // ---- Popup rubrica clienti (condiviso) ----
